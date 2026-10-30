@@ -52,6 +52,11 @@ public abstract class ReplayReader<T> where T : Replay, new()
 
     protected ILogger _logger;
     protected T Replay { get; set; }
+
+    /// <summary>
+    /// Replay time (in seconds) of the demo frame that is currently being read.
+    /// </summary>
+    protected float CurrentTimeSeconds { get; private set; }
     protected ParseMode _parseMode;
     protected bool IsDebugMode => _parseMode == ParseMode.Debug;
 
@@ -812,6 +817,7 @@ public abstract class ReplayReader<T> where T : Replay, new()
         }
 
         var timeSeconds = archive.ReadSingle();
+        CurrentTimeSeconds = timeSeconds;
         _logger?.LogDebug("ReadDemoFrameIntoPlaybackPackets at {}", timeSeconds);
 
         if (archive.NetworkVersion >= NetworkVersionHistory.HISTORY_LEVEL_STREAMING_FIXES)

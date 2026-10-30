@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<AssemblyName>MoreFortniteReplayDecompression</AssemblyName>
+		<RootNamespace>MoreFortniteReplayDecompression</RootNamespace>
+        <StartupObject>MoreFortniteReplayDecompression.Program</StartupObject>
+	</PropertyGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\BenchmarkReader\BenchmarkReader.csproj" />
+	  <ProjectReference Include="..\ConsoleReader\ConsoleReader.csproj" />
+	  <ProjectReference Include="..\FortniteReplayReader.Test\FortniteReplayReader.Test.csproj" />
+	  <ProjectReference Include="..\FortniteReplayReader\FortniteReplayReader.csproj" />
+	  <ProjectReference Include="..\OozSharp.Test\OozSharp.Test.csproj" />
+	  <ProjectReference Include="..\OozSharp\OozSharp.csproj" />
+	  <ProjectReference Include="..\Unreal.Core.Test\Unreal.Core.Test.csproj" />
+	  <ProjectReference Include="..\Unreal.Core\Unreal.Core.csproj" />
+	  <ProjectReference Include="..\Unreal.Encryption.Test\Unreal.Encryption.Test.csproj" />
+	  <ProjectReference Include="..\Unreal.Encryption\Unreal.Encryption.csproj" />
+	</ItemGroup>
+</Project>

@@ -5,7 +5,7 @@ using Unreal.Core.Models.Enums;
 
 namespace FortniteReplayReader.Models.NetFieldExports;
 
-[NetFieldExportClassNetCache("FortTeamPrivateInfo_ClassNetCache", minimalParseMode: ParseMode.Debug)]
+[NetFieldExportClassNetCache("FortTeamPrivateInfo_ClassNetCache", minimalParseMode: ParseMode.Full)]
 public class FortTeamPrivateInfoCache
 {
     [NetFieldExportRPC("LatentTeamRepData", "/Script/FortniteGame.FortTeamPrivateInfo")]
@@ -15,7 +15,7 @@ public class FortTeamPrivateInfoCache
     public object RepData { get; set; }
 }
 
-[NetFieldExportGroup("/Script/FortniteGame.FortTeamPrivateInfo", minimalParseMode: ParseMode.Debug)]
+[NetFieldExportGroup("/Script/FortniteGame.FortTeamPrivateInfo", minimalParseMode: ParseMode.Full)]
 public class FortTeamPrivateInfo : INetFieldExportGroup
 {
     [NetFieldExport("RemoteRole", RepLayoutCmdType.Ignore)]

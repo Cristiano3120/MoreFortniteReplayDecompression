@@ -5,7 +5,7 @@ using Unreal.Core.Models.Enums;
 
 namespace FortniteReplayReader.Models.NetFieldExports;
 
-[NetFieldExportGroup("/Game/Athena/Aircraft/AthenaAircraft.AthenaAircraft_C", minimalParseMode: ParseMode.Ignore)]
+[NetFieldExportGroup("/Game/Athena/Aircraft/AthenaAircraft.AthenaAircraft_C", minimalParseMode: ParseMode.Full)]
 public class Aircraft : INetFieldExportGroup
 {
     [NetFieldExport("RemoteRole", RepLayoutCmdType.Ignore)]
