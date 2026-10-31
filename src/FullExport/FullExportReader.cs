@@ -354,13 +354,15 @@ public sealed class FullExportReader : ReplayReader
         _maxHealth[channel] = (maxHp, maxShield);
 
         var s = Stats(channel);
-        if (s.HealthTimeline.Count == 0 || s.HealthTimeline[^1].Health != hp || s.HealthTimeline[^1].Shield != shield)
+        if (s.HealthTimeline.Count == 0)
         {
-            s.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield, maxHp, maxShield));
+            s.SetMaxHealthAndShield(maxHp, maxShield);
+            s.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
         }
-
-        s.FinalHealth = hp;
-        s.FinalShield = shield;
+        else if (s.HealthTimeline[^1].Health != hp || s.HealthTimeline[^1].Shield != shield)
+        {
+            s.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
+        }
 
         // The replay has no single hits for this; damage is the decrease of health plus shield between two updates.
         var lost = (prev.hp + prev.shield) - (hp + shield);

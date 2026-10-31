@@ -1,6 +1,4 @@
 ﻿using System.Diagnostics;
-using FortniteReplayReader;
-using FortniteReplayReader.Models;
 
 namespace MoreFortniteReplayDecompression;
 
@@ -14,9 +12,8 @@ internal class Program
         //ersetz of durch propertys (=> ) die of callen z.B HealthUpdates => .Of<HealthSet> mach das für jede class
         //für die es möglich ist oder guck ist glaube schon in PlayerStast
         //außer für PlayerStats lass das so wie das gerade ist als property
-        //Entfern die ganzen summen sachen also die die für die ganzen lobbys gelten
         //Guck wegen inventar also das jede PlayerStats instanz auch ne List von Inventory instanzen hat oder so  uns zones das du das anzeigen kannst
-        //Mach für jede class ne file maybe sogar partial files wie PlayerStats.health etc
+        //Schreib test: Convert ein replay in Json und gleich dann immer mit neuer version ab?
 
         int matchCount = 0;
         float msUsedComputing = 0;
@@ -28,6 +25,10 @@ internal class Program
         float aliDmgTaken = 0;
         int artixHits = 0;
         int aliHits = 0;
+        int artixHitsWithKnocks = 0;
+        int artixHitsWithPre = 0;
+        int artixAllHits = 0;
+        int artixStructureHits = 0;
 
 
         foreach (string filepath in Directory.EnumerateFiles("C:\\Users\\Cristiano\\Desktop\\FCS\\MatchReplay\\ArtixReplays"))
@@ -36,6 +37,7 @@ internal class Program
             Console.WriteLine("Match: " + ++matchCount);
 
             ReplayExport export = ReplayExporter.Read(filepath, collectTimeline: false);
+
             PlayerStats artix = export.Players.Where(x => x.Name == "artix 10ǃ").First();
             PlayerStats ali = export.Players.Where(x => x.Name == "Ailton 9ǃ").First();
 
@@ -46,10 +48,15 @@ internal class Program
             Console.WriteLine($"Artix pre round dmg: {artix.PreMatchDamageDealt}");
             Console.WriteLine($"Artix round dmg: {artix.DamageDealt}");
             Console.WriteLine($"Artix knocked dmg: {artix.DamageDealtToDowned}\n");
+            Console.WriteLine("FinalHealth: " + artix.FinalHealth + "," + artix.FinalShield);
             artixDmg += artix.DamageDealt;
             artixKnockDmg += artix.DamageDealtToDowned;
             artixDmgTaken += artix.DamageTaken;
-            artixHits += artix.Hits - artix.PreMatchHits;
+            artixHits += artix.Hits - artix.PreMatchHits - artix.DownedHits;
+            artixAllHits += artix.Hits;
+            artixHitsWithPre += artix.Hits - artix.DownedHits;
+            artixHitsWithKnocks += artix.Hits - artix.PreMatchHits;
+            artixStructureHits += artix.StructureHits;
         
             Console.WriteLine($"Ali pre round dmg: {ali.PreMatchDamageDealt}");
             Console.WriteLine($"Ali round dmg: {ali.DamageDealt}");
@@ -57,7 +64,7 @@ internal class Program
             aliDmg += ali.DamageDealt;
             aliKnockDmg += ali.DamageDealtToDowned;
             aliDmgTaken += ali.DamageTaken;
-            aliHits += ali.Hits - ali.PreMatchHits;
+            aliHits += ali.Hits - ali.PreMatchHits - ali.DownedHits;
 
             stopwatch.Stop();
             msUsedComputing += stopwatch.ElapsedMilliseconds;
@@ -68,6 +75,10 @@ internal class Program
         Console.WriteLine($"Artix Dmg without knocked: {artixDmg - artixKnockDmg}");
         Console.WriteLine($"Artix Dmg Taken: {artixDmgTaken}");
         Console.WriteLine($"Artix Hits: {artixHits}");
+        Console.WriteLine($"Artix WithPreHits: {artixHitsWithPre}");
+        Console.WriteLine($"Artix WithKnockHits: {artixHitsWithKnocks}");
+        Console.WriteLine($"Artix AllHits: {artixHits}");
+        Console.WriteLine($"Artix StructureHits: {artixStructureHits}");
         Console.WriteLine();
 
         Console.WriteLine("ali Dmg:" + aliDmg);

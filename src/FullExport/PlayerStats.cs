@@ -3,56 +3,6 @@ using Unreal.Core.Models;
 
 namespace MoreFortniteReplayDecompression;
 
-/// <summary>A health/shield state of a player. A new sample is only added when a value changes.</summary>
-/// <param name="T">Replay time in seconds since the start of the recording (not the in-game clock).</param>
-public sealed record HealthSample(float T, float Health, float Shield, float MaxHealth, float MaxShield);
-
-/// <summary>
-/// A single hit taken from the <c>BatchedDamageCues</c> RPC of the replay (attacker, target, damage, flags).
-/// Only hits on players are stored as events; hits on structures and other objects are only summed up in <see cref="PlayerStats"/>.
-/// </summary>
-public sealed class HitEvent
-{
-    /// <summary>Replay time in seconds since the start of the recording (not the in-game clock).</summary>
-    public float T { get; init; }
-
-    /// <summary>PlayerState channel of the attacker, if the pawn could be assigned to a player.</summary>
-    public uint? AttackerChannel { get; init; }
-
-    /// <summary>PlayerState channel of the victim.</summary>
-    public uint? VictimChannel { get; init; }
-
-    public PlayerStats? Attacker { get; init; }
-    public PlayerStats? Victim { get; init; }
-
-    /// <summary>Damage of this hit.</summary>
-    public float Amount { get; init; }
-
-    public bool IsCritical { get; init; }
-    public bool IsFatal { get; init; }
-    public bool IsShield { get; init; }
-    public bool IsShieldDestroyed { get; init; }
-    public FVector? Location { get; init; }
-
-    /// <summary>
-    /// Class (archetype path) of the weapon that fired the hit, if known. A hit that arrives in the same frame as a weapon change
-    /// is assigned to the previous weapon. Hits shortly after a change (see <see cref="SecondsSinceWeaponChange"/>) can still be uncertain.
-    /// </summary>
-    public string? Weapon { get; init; }
-
-    /// <summary>Seconds between the attacker's last weapon change and this hit; -1 if no weapon was known.</summary>
-    public float SecondsSinceWeaponChange { get; init; }
-
-    /// <summary>The victim was knocked down (DBNO) when the hit arrived.</summary>
-    public bool VictimWasDowned { get; init; }
-
-    /// <summary>Attacker and victim are on the same team (different players).</summary>
-    public bool IsTeamDamage { get; init; }
-
-    /// <summary>Attacker and victim are the same player.</summary>
-    public bool IsSelfDamage { get; init; }
-}
-
 /// <summary>
 /// All values of one player. The key is the PlayerState channel.
 /// Damage and hits only count from <see cref="MatchStartTime"/> (start of the Battle Bus);
@@ -92,8 +42,11 @@ public sealed class PlayerStats
     /// <summary>Complete health history including the time before the match start.</summary>
     public List<HealthSample> HealthTimeline { get; } = [];
 
-    public float? FinalHealth { get; internal set; }
-    public float? FinalShield { get; internal set; }
+    public float MaxHealth { get; private set; }
+    public float MaxShield { get; private set; }
+
+    public float? FinalHealth => HealthTimeline.Count > 0 ? HealthTimeline[^1].Health : null;
+    public float? FinalShield => HealthTimeline.Count > 0 ? HealthTimeline[^1].Shield : null;
 
     /// <summary>Lowest health since the match start.</summary>
     public float? MinHealth { get; internal set; }
@@ -115,10 +68,10 @@ public sealed class PlayerStats
     public int CriticalHits { get; internal set; }
     public int ShieldHits { get; internal set; }
     public int FatalHits { get; internal set; }
+    public int DownedHits { get; internal set; }
 
     /// <summary>Damage to structures and other non-player objects (sum only).</summary>
     public float DamageDealtToStructures { get; internal set; }
-
     public int StructureHits { get; internal set; }
     public List<HitEvent> DamageDealtEvents { get; } = [];
 
@@ -171,7 +124,11 @@ public sealed class PlayerStats
             if (hit.IsCritical) CriticalHits++;
             if (hit.IsShield) ShieldHits++;
             if (hit.IsFatal) FatalHits++;
-            if (hit.VictimWasDowned) DamageDealtToDowned += hit.Amount;
+            if (hit.VictimWasDowned)
+            {
+                DownedHits++;
+                DamageDealtToDowned += hit.Amount;
+            }
             if (hit.IsTeamDamage) DamageDealtToTeammates += hit.Amount;
             if (hit.IsSelfDamage) DamageDealtToSelf += hit.Amount;
         }
@@ -200,5 +157,14 @@ public sealed class PlayerStats
 
         var inMatch = HealthTimeline.Where(h => h.T >= start).ToList();
         MinHealth = inMatch.Count > 0 ? inMatch.Min(h => h.Health) : null;
+    }
+
+    /// <summary>
+    /// Sets the properties <see cref="MaxHealth"/> and <see cref="MaxShield"/>
+    /// </summary>
+    internal void SetMaxHealthAndShield(float maxHealth, float maxShield)
+    {
+        MaxHealth = maxHealth;
+        MaxShield = maxShield;
     }
 }
