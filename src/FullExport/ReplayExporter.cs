@@ -1,3 +1,5 @@
+using MoreFortniteReplayDecompression.StronglyTypedIds;
+
 namespace MoreFortniteReplayDecompression;
 
 /// <summary>Entry point: reads a replay and returns the standard result plus per-player statistics and (optionally) the typed timeline.</summary>
@@ -19,8 +21,8 @@ public static class ReplayExporter
         {
             Replay = replay,
             Timeline = reader.Events,
-            GuidToChannel = new Dictionary<uint, uint>(reader.GuidToChannel),
-            GuidToArchetype = new Dictionary<uint, string?>(reader.GuidToArchetype),
+            GuidToChannel = new Dictionary<ChannelGuid, ChannelIndex>(reader.GuidToChannel),
+            GuidToArchetype = new Dictionary<ChannelGuid, string?>(reader.GuidToArchetype),
             Players = players,
             MatchStartTime = reader.MatchStartTime,
         };

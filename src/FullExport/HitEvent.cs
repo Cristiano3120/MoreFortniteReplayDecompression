@@ -1,4 +1,5 @@
-﻿using Unreal.Core.Models;
+﻿using MoreFortniteReplayDecompression.StronglyTypedIds;
+using Unreal.Core.Models;
 
 namespace MoreFortniteReplayDecompression;
 
@@ -12,10 +13,10 @@ public sealed class HitEvent
     public float T { get; init; }
 
     /// <summary>PlayerState channel of the attacker, if the pawn could be assigned to a player.</summary>
-    public uint? AttackerChannel { get; init; }
+    public ChannelIndex? AttackerChannel { get; init; }
 
     /// <summary>PlayerState channel of the victim.</summary>
-    public uint? VictimChannel { get; init; }
+    public ChannelIndex? VictimChannel { get; init; }
 
     public PlayerStats? Attacker { get; init; }
     public PlayerStats? Victim { get; init; }

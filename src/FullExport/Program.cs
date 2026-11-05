@@ -14,6 +14,7 @@ internal class Program
         //außer für PlayerStats lass das so wie das gerade ist als property
         //Guck wegen inventar also das jede PlayerStats instanz auch ne List von Inventory instanzen hat oder so  uns zones das du das anzeigen kannst
         //Schreib test: Convert ein replay in Json und gleich dann immer mit neuer version ab?
+        //Hol maybe server replay und check ob dmg übereinstimmt !!!!!!!!!!
 
         int matchCount = 0;
         float msUsedComputing = 0;
@@ -23,6 +24,16 @@ internal class Program
         float aliKnockDmg = 0;
         float artixDmgTaken = 0;
         float aliDmgTaken = 0;
+
+        float bergiiDmg = 0;
+        float bergiiKnockDmg = 0;
+        float bergiiDmgTaken = 0;
+        int bergiiHits = 0;
+        int bergiiHitsWithKnocks = 0;
+        int bergiiHitsWithPre = 0;
+        int bergiiAllHits = 0;
+        int bergiiStructureHits = 0;
+
         int artixHits = 0;
         int aliHits = 0;
         int artixHitsWithKnocks = 0;
@@ -30,7 +41,55 @@ internal class Program
         int artixAllHits = 0;
         int artixStructureHits = 0;
 
+        foreach (string filepath in Directory.EnumerateFiles("C:\\Users\\Cristiano\\Desktop\\FCS\\MatchReplay\\BergiiReplays"))
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            Console.WriteLine("Match: " + ++matchCount);
 
+            ReplayExport export = ReplayExporter.Read(filepath, collectTimeline: false);
+            //FinalHealth macht kein sinn manchmal 0,0 manchamal 100,0 
+            //musst hits überarbeiten 3 knock hits aber nur 20 knocked dmg?? Bergii macht nie dmg an nem knock??
+            //Check dmg von bergii und mates laut replay und laut server replay ob die übereinstimmen
+            //NPCs werden zu Players dazugezählt das musst du aussortieren mach ne extra property dafür die nach IsBot filtert
+            PlayerStats bergii = export.Players.Where(x => x.Name == "Detect Bergii yh").First();
+
+            stopwatch.Stop();
+            msUsedComputing += stopwatch.ElapsedMilliseconds;
+
+            Console.WriteLine($"Battle Bus start t: {export.Players.First().MatchStartTime ?? -1}\n");
+            Console.WriteLine($"Teamkills: {bergii.Kills}\n");
+            Console.WriteLine($"Bergii ID: {bergii.EpicId}");
+            Console.WriteLine($"Bergii pre round dmg: {bergii.PreMatchDamageDealt}");
+            Console.WriteLine($"Bergii round dmg: {bergii.DamageDealt}");
+            Console.WriteLine($"Bergii knocked dmg: {bergii.DamageDealtToDowned}\n");
+            Console.WriteLine("FinalHealth: " + "H: " + (bergii.FinalHealth ?? 0) + ", " + "S: " + (bergii.FinalShield ?? 0));
+
+            bergiiDmg += bergii.DamageDealt;
+            bergiiKnockDmg += bergii.DamageDealtToDowned;
+            bergiiDmgTaken += bergii.DamageTaken;
+            bergiiHits += bergii.Hits - bergii.PreMatchHits - bergii.DownedHits;
+            bergiiAllHits += bergii.Hits;
+            bergiiHitsWithPre += bergii.Hits - bergii.DownedHits;
+            bergiiHitsWithKnocks += bergii.Hits - bergii.PreMatchHits;
+            bergiiStructureHits += bergii.StructureHits;
+
+            Console.WriteLine("Time: " + stopwatch.ElapsedMilliseconds + "ms\n");
+        }
+
+        Console.WriteLine("Final Stats for Bergii:\n");
+        Console.WriteLine("Bergii Dmg:" + bergiiDmg);
+        Console.WriteLine($"Bergii Dmg without knocked: {bergiiDmg - bergiiKnockDmg}");
+        Console.WriteLine($"Bergii Dmg Taken: {bergiiDmgTaken}");
+        Console.WriteLine($"Bergii Hits: {bergiiHits}");
+        Console.WriteLine($"Bergii WithPreHits: {bergiiHitsWithPre}");
+        Console.WriteLine($"Bergii WithKnockHits: {bergiiHitsWithKnocks}");
+        Console.WriteLine($"Bergii AllHits: {bergiiAllHits}");
+        Console.WriteLine($"Bergii StructureHits: {bergiiStructureHits}");
+        Console.WriteLine();
+        Console.WriteLine("Time over " + matchCount + " matches: " + msUsedComputing / 1000 + "s");
+
+        matchCount = 0;
+        msUsedComputing = 0;
         foreach (string filepath in Directory.EnumerateFiles("C:\\Users\\Cristiano\\Desktop\\FCS\\MatchReplay\\ArtixReplays"))
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
@@ -41,6 +100,9 @@ internal class Program
             PlayerStats artix = export.Players.Where(x => x.Name == "artix 10ǃ").First();
             PlayerStats ali = export.Players.Where(x => x.Name == "Ailton 9ǃ").First();
 
+            stopwatch.Stop();
+            msUsedComputing += stopwatch.ElapsedMilliseconds;
+
             Console.WriteLine($"Battle Bus start t: {export.Players.First().MatchStartTime ?? -1}\n");
 
             Console.WriteLine($"Teamkills: {artix.TeamKills}\n");
@@ -48,7 +110,7 @@ internal class Program
             Console.WriteLine($"Artix pre round dmg: {artix.PreMatchDamageDealt}");
             Console.WriteLine($"Artix round dmg: {artix.DamageDealt}");
             Console.WriteLine($"Artix knocked dmg: {artix.DamageDealtToDowned}\n");
-            Console.WriteLine("FinalHealth: " + artix.FinalHealth + "," + artix.FinalShield);
+            Console.WriteLine("FinalHealth: " + "H: " + (artix.FinalHealth ?? 0) + ", " + "S: " + (artix.FinalShield ?? 0));
             artixDmg += artix.DamageDealt;
             artixKnockDmg += artix.DamageDealtToDowned;
             artixDmgTaken += artix.DamageTaken;
@@ -66,8 +128,6 @@ internal class Program
             aliDmgTaken += ali.DamageTaken;
             aliHits += ali.Hits - ali.PreMatchHits - ali.DownedHits;
 
-            stopwatch.Stop();
-            msUsedComputing += stopwatch.ElapsedMilliseconds;
             Console.WriteLine("Time: " + stopwatch.ElapsedMilliseconds + "ms\n");
         }
 

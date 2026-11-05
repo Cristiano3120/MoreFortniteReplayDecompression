@@ -1,4 +1,5 @@
 using FortniteReplayReader.Models;
+using MoreFortniteReplayDecompression.StronglyTypedIds;
 using Unreal.Core.Models;
 
 namespace MoreFortniteReplayDecompression;
@@ -12,7 +13,7 @@ namespace MoreFortniteReplayDecompression;
 /// </summary>
 public sealed class PlayerStats
 {
-    public uint Channel { get; internal set; }
+    public ChannelIndex Channel { get; internal set; }
 
     /// <summary>Replay time (seconds) from which damage counts: start of the Battle Bus. <c>null</c> = not detected, then everything counts.</summary>
     public float? MatchStartTime { get; internal set; }

@@ -1,4 +1,5 @@
 using FortniteReplayReader.Models;
+using MoreFortniteReplayDecompression.StronglyTypedIds;
 using Unreal.Core.Contracts;
 using Unreal.Core.Models;
 
@@ -19,7 +20,7 @@ public abstract record TimelineEvent
     /// Actor channel the update belongs to. Channel numbers are reused for different actors during a replay,
     /// so a channel only identifies an actor at a given time, never a player permanently.
     /// </summary>
-    public required uint Channel { get; init; }
+    public required ChannelIndex Channel { get; init; }
 }
 
 /// <summary>One update of an export group (for example <c>PlayerPawn</c>, <c>HealthSet</c>, <c>SafeZoneIndicator</c>).</summary>
@@ -80,10 +81,10 @@ public sealed class ReplayExport
     public required List<TimelineEvent> Timeline { get; init; }
 
     /// <summary>Actor GUID to channel (last known). Useful to resolve references like <c>PlayerPawn.PlayerState</c>.</summary>
-    public required Dictionary<uint, uint> GuidToChannel { get; init; }
+    public required Dictionary<ChannelGuid, ChannelIndex> GuidToChannel { get; init; }
 
     /// <summary>Actor GUID to archetype path (for example a weapon class).</summary>
-    public required Dictionary<uint, string?> GuidToArchetype { get; init; }
+    public required Dictionary<ChannelGuid, string?> GuidToArchetype { get; init; }
 
     /// <summary>
     /// Replay time (seconds) at which the Battle Bus starts. Damage before that (starter island) is not counted in <see cref="PlayerStats"/>.
@@ -99,7 +100,7 @@ public sealed class ReplayExport
         Players.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>All updates of one group class, for example <c>Of&lt;PlayerPawn&gt;()</c> or <c>Of&lt;HealthSet&gt;()</c>.</summary>
-    public IEnumerable<(float T, uint Channel, TGroup Data)> Of<TGroup>() where TGroup : class, INetFieldExportGroup =>
+    public IEnumerable<(float T, ChannelIndex Channel, TGroup Data)> Of<TGroup>() where TGroup : class, INetFieldExportGroup =>
         Timeline.OfType<ExportEvent>().Where(e => e.Group is TGroup).Select(e => (e.T, e.Channel, (TGroup)e.Group));
 
     /// <summary>All list-element updates of one class, for example <c>DeltasOf&lt;FortClientObservedStat&gt;()</c>.</summary>

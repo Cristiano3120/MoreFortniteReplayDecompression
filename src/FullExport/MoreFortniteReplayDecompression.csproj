@@ -20,4 +20,7 @@
 	  <ProjectReference Include="..\Unreal.Encryption.Test\Unreal.Encryption.Test.csproj" />
 	  <ProjectReference Include="..\Unreal.Encryption\Unreal.Encryption.csproj" />
 	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="State\" />
+	</ItemGroup>
 </Project>

@@ -5,6 +5,7 @@ using FortniteReplayReader.Models;
 using FortniteReplayReader.Models.NetFieldExports;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
 using Microsoft.Extensions.Logging;
+using MoreFortniteReplayDecompression.StronglyTypedIds;
 using Unreal.Core.Contracts;
 using Unreal.Core.Models;
 using Unreal.Core.Models.Enums;
@@ -42,22 +43,22 @@ public sealed class FullExportReader : ReplayReader
     private readonly float _positionInterval;
     private readonly bool _collectTimeline;
 
-    private readonly Dictionary<uint, float> _lastPositionTime = new();
-    private readonly Dictionary<uint, (float hp, float shield)> _lastHealth = new();
-    private readonly Dictionary<uint, (float maxHp, float maxShield)> _maxHealth = new();
+    private readonly Dictionary<ChannelIndex, float> _lastPositionTime = new();
+    private readonly Dictionary<ChannelIndex, Health> _lastHealth = new();
+    private readonly Dictionary<ChannelIndex, Health> _maxHealth = new();
 
     // Actor GUID <-> channel. "Live" maps only contain currently open actors; channel numbers are reused during a replay.
-    private readonly Dictionary<uint, string?> _channelArchetype = new();
-    private readonly Dictionary<uint, string?> _guidArchetype = new();
-    private readonly Dictionary<uint, uint> _guidChannel = new();
-    private readonly Dictionary<uint, uint> _liveGuidChannel = new();
-    private readonly Dictionary<uint, uint> _channelGuid = new();
+    private readonly Dictionary<ChannelIndex, string?> _channelArchetype = new();
+    private readonly Dictionary<ChannelGuid, string?> _guidArchetype = new();
+    private readonly Dictionary<ChannelGuid, ChannelIndex> _guidChannel = new();
+    private readonly Dictionary<ChannelGuid, ChannelIndex> _liveGuidChannel = new();
+    private readonly Dictionary<ChannelIndex, ChannelGuid> _channelGuid = new();
 
     // Pawn state, keyed by the pawn's ACTOR GUID. A GUID identifies one actor for the whole replay,
     // channel numbers are reused and are therefore not suitable as a permanent key.
-    private readonly Dictionary<uint, uint> _pawnPlayerStateGuid = new();   // pawn -> GUID of its PlayerState actor
-    private readonly Dictionary<uint, bool> _pawnDowned = new();
-    private readonly Dictionary<uint, WeaponState> _pawnWeapon = new();
+    private readonly Dictionary<ChannelGuid, ChannelGuid> _pawnPlayerStateGuid = new();   // pawn -> GUID of its PlayerState actor
+    private readonly Dictionary<ChannelGuid, bool> _pawnDowned = new();
+    private readonly Dictionary<ChannelGuid, WeaponState> _pawnWeapon = new();
 
     // Hits are only collected while reading. Which player a pawn belongs to is often learned later
     // (the pawn names its PlayerState with a delay), so hits are assigned to players in BuildPlayers.
@@ -74,19 +75,19 @@ public sealed class FullExportReader : ReplayReader
     }
 
     private sealed record PendingHit(
-        float T, uint? AttackerPawn, uint? Victim, float Amount, bool Critical, bool Fatal, bool Shield, bool ShieldDestroyed,
-        FVector? Location, uint? WeaponGuid, float SecondsSinceWeaponChange, bool VictimDowned, float StructureAmount);
+        float T, ChannelGuid? AttackerPawn, ChannelGuid? Victim, float Amount, bool Critical, bool Fatal, bool Shield, bool ShieldDestroyed,
+        FVector? Location, ChannelGuid? WeaponGuid, float SecondsSinceWeaponChange, bool VictimDowned, float StructureAmount);
 
-    private readonly Dictionary<uint, PlayerStats> _stats = new();
+    private readonly Dictionary<ChannelIndex, PlayerStats> _stats = new();
 
     /// <summary>Typed timeline entries in replay order. Only filled when <c>collectTimeline</c> is set.</summary>
     public List<TimelineEvent> Events { get; } = [];
 
     /// <summary>All players found so far (key: PlayerState channel). Call <see cref="BuildPlayers"/> after reading for the final list.</summary>
-    public IReadOnlyDictionary<uint, PlayerStats> Players => _stats;
+    public IReadOnlyDictionary<ChannelIndex, PlayerStats> Players => _stats;
 
-    public IReadOnlyDictionary<uint, uint> GuidToChannel => _guidChannel;
-    public IReadOnlyDictionary<uint, string?> GuidToArchetype => _guidArchetype;
+    public IReadOnlyDictionary<ChannelGuid, ChannelIndex> GuidToChannel => _guidChannel;
+    public IReadOnlyDictionary<ChannelGuid, string?> GuidToArchetype => _guidArchetype;
 
     /// <summary>
     /// Replay time (seconds) at which the Battle Bus starts. Before that the players are on the starter island;
@@ -124,15 +125,27 @@ public sealed class FullExportReader : ReplayReader
     }
 
     /// <summary>Pawn actor GUID -> player, using everything learned about the pawn during the whole replay.</summary>
-    private PlayerStats? PlayerOfPawn(uint? pawnGuid)
+    private PlayerStats? PlayerOfPawn(ChannelGuid? pawnGuid)
     {
-        if (pawnGuid is not { } guid || guid == 0) return null;
-        if (!_pawnPlayerStateGuid.TryGetValue(guid, out var psGuid)) return null;
-        if (!_guidChannel.TryGetValue(psGuid, out var psChannel)) return null;
+        if (pawnGuid is not { } guid || guid.Value == 0)
+        {
+            return null;
+        }
+
+        if (!_pawnPlayerStateGuid.TryGetValue(guid, out ChannelGuid psGuid))
+        {
+            return null;
+        }
+
+        if (!_guidChannel.TryGetValue(psGuid, out ChannelIndex psChannel))
+        {
+            return null;
+        }
+
         return _stats.GetValueOrDefault(psChannel);
     }
 
-    private string? WeaponClass(uint? weaponGuid) => weaponGuid is { } g ? _guidArchetype.GetValueOrDefault(g) : null;
+    private string? WeaponClass(ChannelGuid? weaponGuid) => weaponGuid is { } guid ? _guidArchetype.GetValueOrDefault(guid) : null;
 
     /// <summary>
     /// Turns the collected raw hits into <see cref="HitEvent"/>s. Done after reading because the pawn-to-player link
@@ -140,28 +153,36 @@ public sealed class FullExportReader : ReplayReader
     /// </summary>
     private void AssignHits()
     {
-        foreach (var s in _stats.Values)
+        foreach (PlayerStats stats in _stats.Values)
         {
-            s.RawDealt.Clear();
-            s.RawTaken.Clear();
-            s.RawStructure.Clear();
+            stats.RawDealt.Clear();
+            stats.RawTaken.Clear();
+            stats.RawStructure.Clear();
         }
 
-        foreach (var h in _pendingHits)
+        foreach (PendingHit pHit in _pendingHits)
         {
-            var attacker = PlayerOfPawn(h.AttackerPawn);
-            var victim = PlayerOfPawn(h.Victim);
+            PlayerStats? attacker = PlayerOfPawn(pHit.AttackerPawn);
+            PlayerStats? victim = PlayerOfPawn(pHit.Victim);
 
             if (victim is not null)
             {
                 var hit = new HitEvent
                 {
-                    T = h.T, Amount = h.Amount, Attacker = attacker, Victim = victim,
-                    AttackerChannel = attacker?.Channel, VictimChannel = victim.Channel,
-                    IsCritical = h.Critical, IsFatal = h.Fatal, IsShield = h.Shield, IsShieldDestroyed = h.ShieldDestroyed,
-                    Location = h.Location, Weapon = WeaponClass(h.WeaponGuid),
-                    SecondsSinceWeaponChange = h.SecondsSinceWeaponChange,
-                    VictimWasDowned = h.VictimDowned,
+                    T = pHit.T,
+                    Amount = pHit.Amount,
+                    Attacker = attacker,
+                    Victim = victim,
+                    AttackerChannel = attacker?.Channel,
+                    VictimChannel = victim.Channel,
+                    IsCritical = pHit.Critical,
+                    IsFatal = pHit.Fatal,
+                    IsShield = pHit.Shield,
+                    IsShieldDestroyed = pHit.ShieldDestroyed,
+                    Location = pHit.Location,
+                    Weapon = WeaponClass(pHit.WeaponGuid),
+                    SecondsSinceWeaponChange = pHit.SecondsSinceWeaponChange,
+                    VictimWasDowned = pHit.VictimDowned,
                     IsSelfDamage = attacker is not null && attacker == victim,
                     IsTeamDamage = attacker is not null && attacker != victim && attacker.TeamIndex is not null && attacker.TeamIndex == victim.TeamIndex,
                 };
@@ -169,67 +190,90 @@ public sealed class FullExportReader : ReplayReader
                 victim.RawTaken.Add(hit);
                 attacker?.RawDealt.Add(hit);
             }
-            else if (attacker is not null && h.StructureAmount > 0)
+            else if (attacker is not null && pHit.StructureAmount > 0)
             {
-                attacker.RawStructure.Add((h.T, h.StructureAmount));
+                attacker.RawStructure.Add((pHit.T, pHit.StructureAmount));
             }
         }
     }
 
     // ---- Callbacks of the base reader ------------------------------------------------------------------------------
 
-    protected override void OnChannelOpened(uint channelIndex, NetworkGUID? actor)
+    protected override void OnChannelOpened(uint uChannelIndex, NetworkGUID? actor)
     {
-        base.OnChannelOpened(channelIndex, actor);
+        ChannelIndex channelIndex = new(uChannelIndex);
+        base.OnChannelOpened(channelIndex.Value, actor);
 
-        if (_channelGuid.Remove(channelIndex, out var oldGuid)) _liveGuidChannel.Remove(oldGuid);
+        if (_channelGuid.Remove(channelIndex, out ChannelGuid oldGuid))
+        {
+            _liveGuidChannel.Remove(oldGuid);
+        }
+
         _lastPositionTime.Remove(channelIndex);
         _lastHealth.Remove(channelIndex);
 
-        var channelActor = Channels[channelIndex]?.Actor;
+        Actor? channelActor = Channels[channelIndex.Value]?.Actor;
         string? archetype = null;
-        if (channelActor?.Archetype is { } arch && _netGuidCache.TryGetPathName(arch.Value, out var path)) archetype = path;
+        if (channelActor?.Archetype is { } arch && _netGuidCache.TryGetPathName(arch.Value, out var path))
+        {
+            archetype = path;
+        }
 
         _channelArchetype[channelIndex] = archetype;
 
         if (actor is { } guid)
         {
-            _liveGuidChannel[guid.Value] = channelIndex;
-            _channelGuid[channelIndex] = guid.Value;
-            _guidArchetype[guid.Value] = archetype;
-            _guidChannel[guid.Value] = channelIndex;
+            ChannelGuid cGuid = new(guid.Value);
+            _liveGuidChannel[cGuid] = channelIndex;
+            _channelGuid[channelIndex] = cGuid;
+            _guidArchetype[cGuid] = archetype;
+            _guidChannel[cGuid] = channelIndex;
         }
 
         if (_collectTimeline)
         {
             Events.Add(new ChannelOpenedEvent
             {
-                T = CurrentTimeSeconds, Channel = channelIndex, ActorGuid = actor?.Value, Archetype = archetype,
-                Location = channelActor?.Location, Rotation = channelActor?.Rotation,
+                T = CurrentTimeSeconds,
+                Channel = channelIndex,
+                ActorGuid = actor?.Value,
+                Archetype = archetype,
+                Location = channelActor?.Location,
+                Rotation = channelActor?.Rotation,
             });
         }
     }
 
-    protected override void OnChannelClosed(uint channelIndex, NetworkGUID? actor)
+    protected override void OnChannelClosed(uint uChannelIndex, NetworkGUID? actor)
     {
-        base.OnChannelClosed(channelIndex, actor);
+        ChannelIndex channelIndex = new(uChannelIndex);
+        base.OnChannelClosed(channelIndex.Value, actor);
 
-        if (_channelGuid.Remove(channelIndex, out var closedGuid)) _liveGuidChannel.Remove(closedGuid);
+        if (_channelGuid.Remove(channelIndex, out ChannelGuid closedGuid))
+        {
+            _liveGuidChannel.Remove(closedGuid);
+        }
 
         if (_collectTimeline)
         {
             Events.Add(new ChannelClosedEvent
             {
-                T = CurrentTimeSeconds, Channel = channelIndex, ActorGuid = actor?.Value,
+                T = CurrentTimeSeconds,
+                Channel = channelIndex,
+                ActorGuid = actor?.Value,
                 Archetype = _channelArchetype.GetValueOrDefault(channelIndex),
             });
         }
     }
 
-    protected override void OnExportRead(uint channelIndex, INetFieldExportGroup? exportGroup)
+    protected override void OnExportRead(uint uChannelIndex, INetFieldExportGroup? exportGroup)
     {
-        base.OnExportRead(channelIndex, exportGroup);
-        if (exportGroup is null) return;
+        ChannelIndex channelIndex = new(uChannelIndex);
+        base.OnExportRead(channelIndex.Value, exportGroup);
+        if (exportGroup is null)
+        {
+            return;
+        }
 
         TrackPlayers(channelIndex, exportGroup);
         if (!_collectTimeline) return;
@@ -251,28 +295,44 @@ public sealed class FullExportReader : ReplayReader
         {
             Events.Add(new ExportEvent
             {
-                T = CurrentTimeSeconds, Channel = channelIndex, Type = exportGroup.GetType().Name, Group = Snapshot(exportGroup),
+                T = CurrentTimeSeconds,
+                Channel = channelIndex,
+                Type = exportGroup.GetType().Name,
+                Group = Snapshot(exportGroup),
             });
         }
     }
 
-    protected override void OnNetDeltaRead(uint channelIndex, NetDeltaUpdate update)
+    protected override void OnNetDeltaRead(uint uChannelIndex, NetDeltaUpdate update)
     {
-        base.OnNetDeltaRead(channelIndex, update);
+        ChannelIndex channelIndex = new(uChannelIndex);
+        base.OnNetDeltaRead(channelIndex.Value, update);
         if (!_collectTimeline || update.Export is null) return;
 
         Events.Add(new NetDeltaEvent
         {
-            T = CurrentTimeSeconds, Channel = channelIndex, Type = update.Export.GetType().Name,
-            ElementIndex = update.ElementIndex, Deleted = update.Deleted, Group = Snapshot(update.Export),
+            T = CurrentTimeSeconds,
+            Channel = channelIndex,
+            Type = update.Export.GetType().Name,
+            ElementIndex = update.ElementIndex,
+            Deleted = update.Deleted,
+            Group = Snapshot(update.Export),
         });
     }
 
     // ---- Player assignment and statistics ---------------------------------------------------------------------------
 
-    private PlayerStats Stats(uint playerStateChannel)
+    private PlayerStats Stats(ChannelIndex playerStateChannel)
     {
-        if (!_stats.TryGetValue(playerStateChannel, out var s)) _stats[playerStateChannel] = s = new PlayerStats { Channel = playerStateChannel };
+        if (!_stats.TryGetValue(playerStateChannel, out PlayerStats? s))
+        {
+            s = new PlayerStats
+            {
+                Channel = playerStateChannel
+            };
+            _stats[playerStateChannel] = s;
+        }
+
         return s;
     }
 
@@ -281,20 +341,31 @@ public sealed class FullExportReader : ReplayReader
         if (MatchStartTime is null || t < MatchStartTime) MatchStartTime = t;
     }
 
-    private void TrackPlayers(uint channel, INetFieldExportGroup group)
+    private void TrackPlayers(ChannelIndex channelIndex, INetFieldExportGroup group)
     {
         switch (group)
         {
             case PlayerPawn pawn:
-                if (!_channelGuid.TryGetValue(channel, out var pawnGuid)) break;
+                if (!_channelGuid.TryGetValue(channelIndex, out ChannelGuid pawnGuid))
+                {
+                    break;
+                }
 
                 // The pawn names its PlayerState by GUID; this links the pawn to the player (resolved later, in BuildPlayers).
-                if (pawn.PlayerState is { } psGuid && psGuid != 0) _pawnPlayerStateGuid[pawnGuid] = psGuid;
-                if (pawn.bIsDBNO is { } downed) _pawnDowned[pawnGuid] = downed;
+                if (pawn.PlayerState is { } psGuid && psGuid != 0)
+                {
+                    ChannelGuid playerStateGuid = new(psGuid);
+                    _pawnPlayerStateGuid[pawnGuid] = playerStateGuid;
+                }
+
+                if (pawn.bIsDBNO is { } downed)
+                {
+                    _pawnDowned[pawnGuid] = downed;
+                }
 
                 if (pawn.CurrentWeapon is { } weapon && weapon != 0)
                 {
-                    if (!_pawnWeapon.TryGetValue(pawnGuid, out var ws)) _pawnWeapon[pawnGuid] = ws = new WeaponState();
+                    if (!_pawnWeapon.TryGetValue(pawnGuid, out WeaponState? ws)) _pawnWeapon[pawnGuid] = ws = new WeaponState();
                     if (ws.Current != weapon)
                     {
                         ws.Previous = ws.Current;
@@ -313,23 +384,23 @@ public sealed class FullExportReader : ReplayReader
             case FortPlayerState fp:
                 if (fp.bInAircraft == true) SetMatchStart(CurrentTimeSeconds);   // fallback if the Aircraft export is missing
 
-                var s = Stats(channel);
-                s.Id ??= fp.PlayerId is null ? fp.PlayerID : (int?)fp.PlayerId;
-                s.EpicId ??= fp.UniqueId ?? fp.UniqueID;
-                s.BotId ??= fp.BotUniqueId;
-                if (fp.bIsABot is { } bot) s.IsBot = bot;
-                if (fp.TeamIndex is { } team) s.TeamIndex = team;
-                if (fp.Place is { } place) s.Placement = place;
-                if (fp.KillScore is { } kills) s.Kills = kills;
-                if (fp.TeamKillScore is { } teamKills) s.TeamKills = teamKills;
+                PlayerStats stats = Stats(channelIndex);
+                stats.Id ??= fp.PlayerId is null ? fp.PlayerID : (int?)fp.PlayerId;
+                stats.EpicId ??= fp.UniqueId ?? fp.UniqueID;
+                stats.BotId ??= fp.BotUniqueId;
+                if (fp.bIsABot is { } bot) stats.IsBot = bot;
+                if (fp.TeamIndex is { } team) stats.TeamIndex = team;
+                if (fp.Place is { } place) stats.Placement = place;
+                if (fp.KillScore is { } kills) stats.Kills = kills;
+                if (fp.TeamKillScore is { } teamKills) stats.TeamKills = teamKills;
                 break;
 
             case HealthSet health:
-                TrackHealth(channel, health);
+                TrackHealth(channelIndex, health);
                 break;
 
             case BatchedDamageCues cue:
-                TrackHit(channel, cue);
+                TrackHit(channelIndex, cue);
                 break;
         }
     }
@@ -338,72 +409,108 @@ public sealed class FullExportReader : ReplayReader
     /// Health history and derived damage. The HealthSet properties are not nullable, so "not sent" cannot be told apart from 0;
     /// a value counts as sent if it or the matching max value is greater than 0.
     /// </summary>
-    private void TrackHealth(uint channel, HealthSet hs)
+    private void TrackHealth(ChannelIndex channelIndex, HealthSet hs)
     {
-        var hasHealth = hs.HealthMaxValue > 0 || hs.HealthCurrentValue > 0;
-        var hasShield = hs.ShieldMaxValue > 0 || hs.ShieldCurrentValue > 0;
-        if (!hasHealth && !hasShield) return;
-
-        _lastHealth.TryGetValue(channel, out var prev);
-        var hp = hasHealth ? hs.HealthCurrentValue : prev.hp;
-        var shield = hasShield ? hs.ShieldCurrentValue : prev.shield;
-        _lastHealth[channel] = (hp, shield);
-
-        var maxHp = hs.HealthMaxValue > 0 ? hs.HealthMaxValue : _maxHealth.GetValueOrDefault(channel).maxHp;
-        var maxShield = hs.ShieldMaxValue > 0 ? hs.ShieldMaxValue : _maxHealth.GetValueOrDefault(channel).maxShield;
-        _maxHealth[channel] = (maxHp, maxShield);
-
-        var s = Stats(channel);
-        if (s.HealthTimeline.Count == 0)
+        bool hasHealth = hs.HealthMaxValue > 0 || hs.HealthCurrentValue > 0;
+        bool hasShield = hs.ShieldMaxValue > 0 || hs.ShieldCurrentValue > 0;
+        if (!hasHealth && !hasShield)
         {
-            s.SetMaxHealthAndShield(maxHp, maxShield);
-            s.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
+            return;
         }
-        else if (s.HealthTimeline[^1].Health != hp || s.HealthTimeline[^1].Shield != shield)
+
+        _lastHealth.TryGetValue(channelIndex, out Health previousHealthState);
+        float hp = hasHealth
+            ? hs.HealthCurrentValue
+            : previousHealthState.Hp;
+        float shield = hasShield
+            ? hs.ShieldCurrentValue
+            : previousHealthState.Shield;
+
+        _lastHealth[channelIndex] = new Health(hp, shield);
+
+        float maxHp = hs.HealthMaxValue > 0
+            ? hs.HealthMaxValue
+            : _maxHealth.GetValueOrDefault(channelIndex).Hp;
+        float maxShield = hs.ShieldMaxValue > 0
+            ? hs.ShieldMaxValue
+            : _maxHealth.GetValueOrDefault(channelIndex).Shield;
+
+        _maxHealth[channelIndex] = new Health(maxHp, maxShield);
+
+        PlayerStats stats = Stats(channelIndex);
+        if (stats.HealthTimeline.Count == 0)
         {
-            s.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
+            stats.SetMaxHealthAndShield(maxHp, maxShield);
+            stats.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
+        }
+        else if (stats.HealthTimeline[^1].Health != hp || stats.HealthTimeline[^1].Shield != shield)
+        {
+            stats.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
         }
 
         // The replay has no single hits for this; damage is the decrease of health plus shield between two updates.
-        var lost = (prev.hp + prev.shield) - (hp + shield);
-        if (lost > 0 && (prev.hp > 0 || prev.shield > 0))
+        float lost = (previousHealthState.Hp + previousHealthState.Shield) - (hp + shield);
+        if (lost > 0 && (previousHealthState.Hp > 0 || previousHealthState.Shield > 0))
         {
-            s.RawHealthLoss.Add((CurrentTimeSeconds, lost));
+            stats.RawHealthLoss.Add((CurrentTimeSeconds, lost));
 
             if (_collectTimeline)
             {
                 Events.Add(new DerivedDamageEvent
                 {
-                    T = CurrentTimeSeconds, Channel = channel, Amount = lost,
-                    Health = prev.hp - hp, Shield = prev.shield - shield, HealthAfter = hp, ShieldAfter = shield,
+                    T = CurrentTimeSeconds,
+                    Channel = channelIndex,
+                    Amount = lost,
+                    Health = previousHealthState.Hp - hp,
+                    Shield = previousHealthState.Shield - shield,
+                    HealthAfter = hp,
+                    ShieldAfter = shield,
                 });
             }
         }
     }
 
-    private void TrackHit(uint attackerPawnChannel, BatchedDamageCues cue)
+    private void TrackHit(ChannelIndex attackerPawnChannel, BatchedDamageCues cue)
     {
         // The RPC runs on the attacker's pawn; HitActor is the GUID of the target. Only raw data is stored here.
-        _channelGuid.TryGetValue(attackerPawnChannel, out var attackerPawn);
+        _channelGuid.TryGetValue(attackerPawnChannel, out ChannelGuid attackerPawn);
 
         // Weapon: the pawn's weapon property is read BEFORE the hit RPC of the same frame. A hit that arrives in the frame
         // of a weapon change was therefore fired with the old weapon (verified on a replay: all such hits fit only the old weapon).
-        uint? weaponGuid = null;
-        var sinceChange = float.PositiveInfinity;
-        if (attackerPawn != 0 && _pawnWeapon.TryGetValue(attackerPawn, out var ws))
+        ChannelGuid? weaponGuid = null;
+        float sinceChange = float.PositiveInfinity;
+        if (attackerPawn != 0 && _pawnWeapon.TryGetValue(attackerPawn, out WeaponState? ws))
         {
             sinceChange = CurrentTimeSeconds - ws.ChangedAt;
-            weaponGuid = sinceChange < SameFrameSeconds && ws.Previous != 0 ? ws.Previous : ws.Current;
+            weaponGuid = new ChannelGuid(sinceChange < SameFrameSeconds && ws.Previous != 0 ? ws.Previous : ws.Current);
         }
 
-        var victim = cue.HitActor is > 0 ? cue.HitActor : null;
-        var structureAmount = (cue.HitActor is > 0 ? cue.Magnitude : null) ?? cue.NonPlayerMagnitude ?? 0;
+        ChannelGuid? victim = cue.HitActor is > 0
+            ? new ChannelGuid(cue.HitActor.Value)
+            : null;
 
-        _pendingHits.Add(new PendingHit(
-            CurrentTimeSeconds, attackerPawn == 0 ? null : attackerPawn, victim, cue.Magnitude ?? 0,
-            cue.bIsCritical == true, cue.bIsFatal == true, cue.bIsShield == true, cue.bIsShieldDestroyed == true,
-            cue.Location, weaponGuid, float.IsPositiveInfinity(sinceChange) ? -1 : sinceChange,
-            victim is { } v && _pawnDowned.GetValueOrDefault(v), structureAmount));
+        float structureAmount = (cue.HitActor is > 0
+            ? cue.Magnitude
+            : null)
+            ?? cue.NonPlayerMagnitude ?? 0;
+
+        PendingHit pendingHit = new
+        (
+            T: CurrentTimeSeconds,
+            AttackerPawn: attackerPawn == 0 ? null : attackerPawn,
+            Victim: victim,
+            Amount: cue.Magnitude ?? 0,
+            Critical: cue.bIsCritical == true,
+            Fatal: cue.bIsFatal == true,
+            Shield: cue.bIsShield == true,
+            ShieldDestroyed: cue.bIsShieldDestroyed == true,
+            Location: cue.Location,
+            WeaponGuid: weaponGuid,
+            SecondsSinceWeaponChange: float.IsPositiveInfinity(sinceChange) ? -1 : sinceChange,
+            VictimDowned: victim is { } v && _pawnDowned.GetValueOrDefault(v),
+            StructureAmount: structureAmount
+        );
+        _pendingHits.Add(pendingHit);
     }
 
     // ---- Presence check ---------------------------------------------------------------------------------------------
