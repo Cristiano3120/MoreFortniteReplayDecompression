@@ -1,3 +1,4 @@
+using FortniteReplayReader.Models;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
 
 namespace MoreFortniteReplayDecompression;
@@ -13,9 +14,20 @@ public static class ReplayExporter
     /// </param>
     public static ReplayExport Read(string path, float positionInterval = 1f, bool collectTimeline = true)
     {
-        var reader = new FullExportReader(positionInterval, collectTimeline: collectTimeline);
-        var replay = reader.ReadReplay(path);
-        var players = reader.BuildPlayers(replay);
+        return Read(path, new ExportSettings
+        {
+            PositionInterval = positionInterval,
+            CollectTimeline = collectTimeline,
+        });
+    }
+
+    /// <param name="path">Path to the .replay file.</param>
+    /// <param name="settings">What should be read. Everything that is switched off is not parsed (faster).</param>
+    public static ReplayExport Read(string path, ExportSettings settings)
+    {
+        FullExportReader reader = new(settings);
+        FortniteReplay replay = reader.ReadReplay(path);
+        List<PlayerStats> players = reader.BuildPlayers(replay);
 
         return new ReplayExport
         {
@@ -23,8 +35,11 @@ public static class ReplayExporter
             Timeline = reader.Events,
             GuidToChannel = new Dictionary<ChannelGuid, ChannelIndex>(reader.GuidToChannel),
             GuidToArchetype = new Dictionary<ChannelGuid, string?>(reader.GuidToArchetype),
-            Players = players,
+            Players = [.. players.Where(p => !p.IsBot)],
+            Bots = [.. players.Where(p => p.IsBot)],
             MatchStartTime = reader.MatchStartTime,
+            StormPhases = reader.StormPhases,
+            SupplyDrops = reader.SupplyDrops,
         };
     }
 }

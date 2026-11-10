@@ -30,7 +30,11 @@ public class NetFieldParser
     /// <param name="cache">Instance of NetGuidCache, used to resolve netguids to their string value.</param>
     /// <param name="mode"></param>
     /// <param name="assemblyNameFilter">Found assemblies should contain this string.</param>
-    public NetFieldParser(NetGuidCache cache, ParseMode mode, string assemblyNameFilter = "ReplayReader")
+    /// <param name="ignoredTypes">
+    /// Export group types that are not parsed even if their parse mode would allow it. The parser skips their data completely,
+    /// which saves time if the data is not needed (for example health or damage cues).
+    /// </param>
+    public NetFieldParser(NetGuidCache cache, ParseMode mode, string assemblyNameFilter = "ReplayReader", IReadOnlySet<Type>? ignoredTypes = null)
     {
         GuidCache = cache;
 
@@ -43,6 +47,11 @@ public class NetFieldParser
         var netFields = types.Where(c => c.GetCustomAttribute<NetFieldExportGroupAttribute>() != null);
         foreach (var type in netFields)
         {
+            if (ignoredTypes?.Contains(type) == true)
+            {
+                continue;
+            }
+
             var attribute = type.GetCustomAttribute<NetFieldExportGroupAttribute>();
             if (attribute.MinimalParseMode <= mode)
             {
@@ -62,9 +71,8 @@ public class NetFieldParser
         foreach (var type in netSubFields)
         {
             var attribute = type.GetCustomAttribute<NetFieldExportSubGroupAttribute>();
-            if (attribute.MinimalParseMode <= mode)
+            if (attribute.MinimalParseMode <= mode && NetFieldGroups.TryGetValue(attribute.Path, out var info))
             {
-                NetFieldGroups.TryGetValue(attribute.Path, out var info);
                 AddNetFieldInfo(type, info, mode);
             }
         }

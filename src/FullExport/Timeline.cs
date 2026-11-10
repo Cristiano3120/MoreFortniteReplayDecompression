@@ -92,8 +92,18 @@ public sealed class ReplayExport
     /// </summary>
     public float? MatchStartTime { get; init; }
 
+    /// <summary>Storm phases with replay times, see <see cref="Storm.SafeZoneAt"/>.</summary>
+    public List<StormPhase> StormPhases { get; init; } = [];
+
+    /// <summary>Supply drops of the match (spawn time, spawn and landing location).</summary>
+    public List<SupplyDropInfo> SupplyDrops { get; init; } = [];
+
+    /// <summary>The player who recorded the replay (has <see cref="PlayerStats.EpicMatchStats"/>), <c>null</c> if unknown.</summary>
+    public PlayerStats? ReplayOwner => Players.FirstOrDefault(p => p.IsReplayOwner);
+
     /// <summary>All players with health history and damage dealt/taken, sorted by placement.</summary>
     public required List<PlayerStats> Players { get; init; }
+    public required List<PlayerStats> Bots { get; init; }
 
     /// <summary>Finds a player by name (case-insensitive). Returns <c>null</c> if there is none.</summary>
     public PlayerStats? Player(string name) =>

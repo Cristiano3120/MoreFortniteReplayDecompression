@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using FortniteReplayReader;
 using FortniteReplayReader.Models;
+using FortniteReplayReader.Models.Events;
 using FortniteReplayReader.Models.NetFieldExports;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
 using Microsoft.Extensions.Logging;
@@ -40,6 +41,10 @@ public sealed class FullExportReader : ReplayReader
 
     private static INetFieldExportGroup Snapshot(INetFieldExportGroup group) => (INetFieldExportGroup)CloneMethod.Invoke(group, null)!;
 
+    /// <summary>Pawn movement updates further apart than this (cm) are a teleport (spawn, reboot, ...) and do not count as traveled distance.</summary>
+    private const double MaxMovementStep = 10_000;
+
+    private readonly ExportSettings _settings;
     private readonly float _positionInterval;
     private readonly bool _collectTimeline;
 
@@ -57,8 +62,17 @@ public sealed class FullExportReader : ReplayReader
     // Pawn state, keyed by the pawn's ACTOR GUID. A GUID identifies one actor for the whole replay,
     // channel numbers are reused and are therefore not suitable as a permanent key.
     private readonly Dictionary<ChannelGuid, ChannelGuid> _pawnPlayerStateGuid = new();   // pawn -> GUID of its PlayerState actor
-    private readonly Dictionary<ChannelGuid, bool> _pawnDowned = new();
+    private readonly Dictionary<ChannelGuid, List<(float T, bool Downed)>> _pawnDownedChanges = new();
     private readonly Dictionary<ChannelGuid, WeaponState> _pawnWeapon = new();
+    private readonly Dictionary<ChannelGuid, List<(float T, uint Weapon)>> _pawnWeaponChanges = new();
+    private readonly Dictionary<ChannelGuid, List<PositionSample>> _pawnPositions = new();
+    private readonly Dictionary<ChannelGuid, FVector> _pawnLastLocation = new();
+    private readonly Dictionary<ChannelGuid, double> _pawnDistance = new();
+    private readonly Dictionary<ChannelGuid, (bool Skydiving, bool Parachute)> _pawnInAir = new();
+
+    // Match-wide data
+    private readonly List<(float ReplayT, double WorldT)> _worldTimes = [];
+    private readonly List<(float T, ChannelIndex Channel, FVector? Location)> _supplyDropSpawns = [];
 
     // Hits are only collected while reading. Which player a pawn belongs to is often learned later
     // (the pawn names its PlayerState with a delay), so hits are assigned to players in BuildPlayers.
@@ -66,6 +80,12 @@ public sealed class FullExportReader : ReplayReader
 
     /// <summary>A shot is delivered in the same frame as a weapon change at most this many seconds apart: it still belongs to the old weapon.</summary>
     private const float SameFrameSeconds = 0.02f;
+
+    /// <summary>The cue of the hit that knocks a player arrives at most this many seconds after the player's <c>bIsDBNO</c>.</summary>
+    private const float KnockCueDelaySeconds = 0.25f;
+
+    /// <summary>A knocked player whose knock ended this many seconds before the elimination was revived in between.</summary>
+    private const float ReviveToleranceSeconds = 0.5f;
 
     private sealed class WeaponState
     {
@@ -76,7 +96,7 @@ public sealed class FullExportReader : ReplayReader
 
     private sealed record PendingHit(
         float T, ChannelGuid? AttackerPawn, ChannelGuid? Victim, float Amount, bool Critical, bool Fatal, bool Shield, bool ShieldDestroyed,
-        FVector? Location, ChannelGuid? WeaponGuid, float SecondsSinceWeaponChange, bool VictimDowned, float StructureAmount);
+        FVector? Location, ChannelGuid? WeaponGuid, bool WeaponFromCue, float SecondsSinceWeaponChange, bool VictimDowned, float StructureAmount);
 
     private readonly Dictionary<ChannelIndex, PlayerStats> _stats = new();
 
@@ -95,14 +115,28 @@ public sealed class FullExportReader : ReplayReader
     /// </summary>
     public float? MatchStartTime { get; private set; }
 
+    /// <summary>Storm phases with replay times. Filled by <see cref="BuildPlayers"/>.</summary>
+    public List<StormPhase> StormPhases { get; private set; } = [];
+
+    /// <summary>Supply drops of the match. Filled by <see cref="BuildPlayers"/>.</summary>
+    public List<SupplyDropInfo> SupplyDrops { get; private set; } = [];
+
     /// <param name="positionInterval">Seconds between two stored pawn updates that only contain movement data.</param>
     /// <param name="logger">Optional logger, for example a <see cref="GroupLogger"/>.</param>
     /// <param name="collectTimeline"><c>false</c> = only collect <see cref="PlayerStats"/> (faster, less memory).</param>
     public FullExportReader(float positionInterval = 1f, ILogger? logger = null, bool collectTimeline = true)
-        : base(logger!, ParseMode.Full)
+        : this(new ExportSettings { PositionInterval = positionInterval, CollectTimeline = collectTimeline }, logger)
     {
-        _positionInterval = positionInterval;
-        _collectTimeline = collectTimeline;
+    }
+
+    /// <param name="settings">What should be read, see <see cref="ExportSettings"/>.</param>
+    /// <param name="logger">Optional logger, for example a <see cref="GroupLogger"/>.</param>
+    public FullExportReader(ExportSettings settings, ILogger? logger = null)
+        : base(logger!, ParseMode.Full, settings.GetIgnoredTypes())
+    {
+        _settings = settings;
+        _positionInterval = settings.PositionInterval;
+        _collectTimeline = settings.CollectTimeline;
     }
 
     /// <summary>
@@ -111,17 +145,215 @@ public sealed class FullExportReader : ReplayReader
     /// </summary>
     public List<PlayerStats> BuildPlayers(FortniteReplay replay)
     {
-        var players = _stats.Values.Where(p => p.Id is not null).ToList();
-        var byId = replay.PlayerData.Where(d => d.Id is not null).GroupBy(d => d.Id).ToDictionary(g => g.Key, g => g.First());
+        List<PlayerStats> players = _stats.Values.Where(p => p.Id is not null).ToList();
+        Dictionary<int?, PlayerData> byId = replay.PlayerData.Where(d => d.Id is not null).GroupBy(d => d.Id).ToDictionary(g => g.Key, g => g.First());
 
-        foreach (var p in players) p.Data = byId.GetValueOrDefault(p.Id);
+        ChannelIndex? recorderChannel = replay.GameData.RecorderId is { } recorderId && _guidChannel.TryGetValue(new ChannelGuid(recorderId), out ChannelIndex channel)
+            ? channel
+            : null;
+
+        foreach (PlayerStats? p in players)
+        {
+            p.Data = byId.GetValueOrDefault(p.Id);
+            p.EpicId ??= p.Data?.EpicId;
+            p.BotId ??= p.Data?.BotId;
+            p.IsReplayOwner = p.Data?.IsReplayOwner == true || p.Channel == recorderChannel;
+
+            if (p.IsReplayOwner)
+            {
+                p.EpicMatchStats = replay.Stats;
+            }
+        }
+
+        float matchEnd = MatchEndTime(replay);
+        StormPhases = Storm.BuildPhases(replay.MapData.SafeZones, WorldToReplayTime);
+        SupplyDrops = BuildSupplyDrops(replay);
 
         AssignHits();
+        AssignPawnData();
+        AssignEliminations(replay, players);
 
-        foreach (var p in players) p.Finish(MatchStartTime);
+        FinishContext context = new(MatchStartTime, matchEnd, StormPhases, SupplyDrops);
+        foreach (PlayerStats? p in players)
+        {
+            p.Finish(context);
+        }
 
         players.Sort((a, b) => (a.Placement ?? int.MaxValue).CompareTo(b.Placement ?? int.MaxValue));
         return players;
+    }
+
+    /// <summary>Replay time of the end of the match; the end of the recording if the match end is unknown.</summary>
+    private float MatchEndTime(FortniteReplay replay)
+    {
+        float recordingEnd = (replay.Info?.LengthInMs ?? 0) / 1000f;
+        if (replay.GameData.MatchEndTime is { } worldEnd && worldEnd > 0 && _worldTimes.Count > 0)
+        {
+            return Math.Min(WorldToReplayTime(worldEnd), recordingEnd);
+        }
+
+        return recordingEnd;
+    }
+
+    /// <summary>
+    /// Converts a world time (game clock, used by the safe zones and the game state) into a replay time,
+    /// using the nearest replicated world time of the game state.
+    /// </summary>
+    private float WorldToReplayTime(double worldTime)
+    {
+        if (_worldTimes.Count == 0)
+        {
+            return (float)worldTime;
+        }
+
+        (float ReplayT, double WorldT) nearest = _worldTimes[0];
+        foreach ((float ReplayT, double WorldT) sample in _worldTimes)
+        {
+            if (Math.Abs(sample.WorldT - worldTime) < Math.Abs(nearest.WorldT - worldTime))
+            {
+                nearest = sample;
+            }
+        }
+
+        return (float)(nearest.ReplayT + (worldTime - nearest.WorldT));
+    }
+
+    private List<SupplyDropInfo> BuildSupplyDrops(FortniteReplay replay)
+    {
+        Dictionary<uint, FortniteReplayReader.Models.SupplyDrop> landed = replay.MapData.SupplyDrops
+            .GroupBy(d => d.Id)
+            .ToDictionary(g => g.Key, g => g.Last());
+
+        List<SupplyDropInfo> drops = [];
+        foreach ((float t, ChannelIndex channel, FVector? location) in _supplyDropSpawns)
+        {
+            FortniteReplayReader.Models.SupplyDrop? drop = landed.GetValueOrDefault(channel.Value);
+            drops.Add(new SupplyDropInfo
+            {
+                SpawnT = t,
+                SpawnLocation = location,
+                LandingLocation = drop?.LandingLocation,
+                Looted = drop?.Looted == true,
+            });
+        }
+
+        return drops;
+    }
+
+    /// <summary>Moves everything that was collected per pawn (positions, knocks, weapons) to the pawn's player.</summary>
+    private void AssignPawnData()
+    {
+        foreach (PlayerStats stats in _stats.Values)
+        {
+            stats.Positions.Clear();
+            stats.RawDownedChanges.Clear();
+            stats.RawWeaponChanges.Clear();
+            stats.RawDistance = 0;
+        }
+
+        foreach ((ChannelGuid pawn, ChannelGuid _) in _pawnPlayerStateGuid)
+        {
+            if (PlayerOfPawn(pawn) is not { } player)
+            {
+                continue;
+            }
+
+            if (_pawnPositions.TryGetValue(pawn, out List<PositionSample>? positions))
+            {
+                player.Positions.AddRange(positions);
+            }
+
+            if (_pawnDownedChanges.TryGetValue(pawn, out List<(float T, bool Downed)>? downed))
+            {
+                player.RawDownedChanges.AddRange(downed);
+            }
+
+            if (_pawnWeaponChanges.TryGetValue(pawn, out List<(float T, uint Weapon)>? weapons))
+            {
+                foreach ((float t, uint weapon) in weapons)
+                {
+                    player.RawWeaponChanges.Add(new WeaponChange(t, WeaponClass(new ChannelGuid(weapon))));
+                }
+            }
+
+            player.RawDistance += _pawnDistance.GetValueOrDefault(pawn);
+        }
+
+        // A player can have several pawns (reboot), so the lists are sorted by time again.
+        foreach (PlayerStats stats in _stats.Values)
+        {
+            stats.Positions.Sort((a, b) => a.T.CompareTo(b.T));
+            stats.RawDownedChanges.Sort((a, b) => a.T.CompareTo(b.T));
+            stats.RawWeaponChanges.Sort((a, b) => a.T.CompareTo(b.T));
+        }
+    }
+
+    /// <summary>
+    /// Links the kill feed (knocks and eliminations) of the library to the players.
+    /// Fortnite credits an elimination to the player who KNOCKED the victim, even if a teammate finished it;
+    /// <see cref="EliminationEvent.CreditedTo"/> follows that rule (this matches Epic's end-of-match eliminations).
+    /// </summary>
+    private static void AssignEliminations(FortniteReplay replay, List<PlayerStats> players)
+    {
+        Dictionary<string, PlayerStats> byPlayerId = new(StringComparer.OrdinalIgnoreCase);
+        foreach (PlayerStats p in players)
+        {
+            p.RawEliminations.Clear();
+            p.RawDeaths.Clear();
+
+            if (p.Data?.PlayerId is { } playerId)
+            {
+                byPlayerId.TryAdd(playerId, p);
+            }
+        }
+
+        // Victim -> (time, player) of the knock that is still open.
+        Dictionary<PlayerStats, (float T, PlayerStats? Knocker)> openKnocks = [];
+
+        foreach (PlayerElimination elimination in replay.Eliminations.OrderBy(x => x.Info.StartTime))
+        {
+            float t = elimination.Info.StartTime / 1000f;
+            PlayerStats? eliminator = elimination.Eliminator is { } eliminatorId
+                ? byPlayerId.GetValueOrDefault(eliminatorId)
+                : null;
+            PlayerStats? eliminated = elimination.Eliminated is { } eliminatedId
+                ? byPlayerId.GetValueOrDefault(eliminatedId)
+                : null;
+
+            PlayerStats? creditedTo = eliminator;
+            if (eliminated is not null)
+            {
+                if (elimination.Knocked)
+                {
+                    openKnocks[eliminated] = (t, eliminator);
+                }
+                else if (openKnocks.Remove(eliminated, out (float T, PlayerStats? Knocker) knock) && !WasRevived(eliminated, knock.T, t))
+                {
+                    creditedTo = knock.Knocker ?? eliminator;
+                }
+            }
+
+            EliminationEvent e = new()
+            {
+                T = t,
+                Eliminator = eliminator,
+                CreditedTo = creditedTo,
+                Eliminated = eliminated,
+                IsKnock = elimination.Knocked,
+                IsSelfElimination = creditedTo is not null && creditedTo == eliminated,
+                IsTeamElimination = creditedTo is not null && creditedTo != eliminated && creditedTo.TeamIndex is not null && creditedTo.TeamIndex == eliminated?.TeamIndex,
+                GunType = elimination.GunType,
+            };
+
+            creditedTo?.RawEliminations.Add(e);
+            eliminated?.RawDeaths.Add(e);
+        }
+    }
+
+    /// <summary><c>true</c> if <paramref name="victim"/> got up again between the knock and the elimination.</summary>
+    private static bool WasRevived(PlayerStats victim, float knockT, float eliminationT)
+    {
+        return victim.RawDownedChanges.Any(c => !c.Downed && c.T > knockT && c.T < eliminationT - ReviveToleranceSeconds);
     }
 
     /// <summary>Pawn actor GUID -> player, using everything learned about the pawn during the whole replay.</summary>
@@ -145,7 +377,8 @@ public sealed class FullExportReader : ReplayReader
         return _stats.GetValueOrDefault(psChannel);
     }
 
-    private string? WeaponClass(ChannelGuid? weaponGuid) => weaponGuid is { } guid ? _guidArchetype.GetValueOrDefault(guid) : null;
+    private string? WeaponClass(ChannelGuid? weaponGuid)
+        => weaponGuid is { } guid ? _guidArchetype.GetValueOrDefault(guid) : null;
 
     /// <summary>
     /// Turns the collected raw hits into <see cref="HitEvent"/>s. Done after reading because the pawn-to-player link
@@ -167,7 +400,7 @@ public sealed class FullExportReader : ReplayReader
 
             if (victim is not null)
             {
-                var hit = new HitEvent
+                HitEvent hit = new()
                 {
                     T = pHit.T,
                     Amount = pHit.Amount,
@@ -181,6 +414,7 @@ public sealed class FullExportReader : ReplayReader
                     IsShieldDestroyed = pHit.ShieldDestroyed,
                     Location = pHit.Location,
                     Weapon = WeaponClass(pHit.WeaponGuid),
+                    IsWeaponFromCue = pHit.WeaponFromCue,
                     SecondsSinceWeaponChange = pHit.SecondsSinceWeaponChange,
                     VictimWasDowned = pHit.VictimDowned,
                     IsSelfDamage = attacker is not null && attacker == victim,
@@ -220,6 +454,11 @@ public sealed class FullExportReader : ReplayReader
         }
 
         _channelArchetype[channelIndex] = archetype;
+
+        if (archetype is not null && archetype.Contains("AthenaSupplyDrop_C", StringComparison.Ordinal))
+        {
+            _supplyDropSpawns.Add((CurrentTimeSeconds, channelIndex, channelActor?.Location));
+        }
 
         if (actor is { } guid)
         {
@@ -276,14 +515,21 @@ public sealed class FullExportReader : ReplayReader
         }
 
         TrackPlayers(channelIndex, exportGroup);
-        if (!_collectTimeline) return;
+        if (!_collectTimeline)
+        {
+            return;
+        }
 
         // Keep only updates that actually carry data. Pawn updates that only contain movement are thinned out to the interval.
-        var keep = true;
+        bool keep = true;
         if (exportGroup is PlayerPawn)
         {
-            var due = !_lastPositionTime.TryGetValue(channelIndex, out var last) || CurrentTimeSeconds - last >= _positionInterval;
-            if (due) _lastPositionTime[channelIndex] = CurrentTimeSeconds;
+            bool due = !_lastPositionTime.TryGetValue(channelIndex, out var last) || CurrentTimeSeconds - last >= _positionInterval;
+            if (due)
+            {
+                _lastPositionTime[channelIndex] = CurrentTimeSeconds;
+            }
+
             keep = due || Presence.Any(exportGroup, NoisyPawnProps);
         }
         else
@@ -307,7 +553,10 @@ public sealed class FullExportReader : ReplayReader
     {
         ChannelIndex channelIndex = new(uChannelIndex);
         base.OnNetDeltaRead(channelIndex.Value, update);
-        if (!_collectTimeline || update.Export is null) return;
+        if (!_collectTimeline || update.Export is null)
+        {
+            return;
+        }
 
         Events.Add(new NetDeltaEvent
         {
@@ -338,7 +587,10 @@ public sealed class FullExportReader : ReplayReader
 
     private void SetMatchStart(float t)
     {
-        if (MatchStartTime is null || t < MatchStartTime) MatchStartTime = t;
+        if (MatchStartTime is null || t < MatchStartTime)
+        {
+            MatchStartTime = t;
+        }
     }
 
     private void TrackPlayers(ChannelIndex channelIndex, INetFieldExportGroup group)
@@ -360,39 +612,99 @@ public sealed class FullExportReader : ReplayReader
 
                 if (pawn.bIsDBNO is { } downed)
                 {
-                    _pawnDowned[pawnGuid] = downed;
+                    TrackDowned(pawnGuid, downed);
                 }
 
                 if (pawn.CurrentWeapon is { } weapon && weapon != 0)
                 {
-                    if (!_pawnWeapon.TryGetValue(pawnGuid, out WeaponState? ws)) _pawnWeapon[pawnGuid] = ws = new WeaponState();
+                    if (!_pawnWeapon.TryGetValue(pawnGuid, out WeaponState? ws))
+                    {
+                        ws = new WeaponState();
+                        _pawnWeapon[pawnGuid] = ws;
+                    }
+
                     if (ws.Current != weapon)
                     {
                         ws.Previous = ws.Current;
                         ws.Current = weapon;
                         ws.ChangedAt = CurrentTimeSeconds;
+
+                        if (_settings.TrackWeapons)
+                        {
+                            AddToList(_pawnWeaponChanges, pawnGuid, (CurrentTimeSeconds, weapon));
+                        }
                     }
+                }
+
+                if (pawn.bIsSkydiving is not null || pawn.bIsParachuteOpen is not null)
+                {
+                    (bool Skydiving, bool Parachute) air = _pawnInAir.GetValueOrDefault(pawnGuid);
+                    _pawnInAir[pawnGuid] = (pawn.bIsSkydiving ?? air.Skydiving, pawn.bIsParachuteOpen ?? air.Parachute);
+                }
+
+                if (_settings.TrackPositions && pawn.ReplicatedMovement?.Location is { } location)
+                {
+                    TrackPosition(pawnGuid, location);
                 }
 
                 break;
 
+            case GameState gameState:
+                if (gameState.ReplicatedWorldTimeSecondsDouble is { } worldTimeDouble)
+                {
+                    _worldTimes.Add((CurrentTimeSeconds, worldTimeDouble));
+                }
+                else if (gameState.ReplicatedWorldTimeSeconds is { } worldTime)
+                {
+                    _worldTimes.Add((CurrentTimeSeconds, worldTime));
+                }
+                break;
+
             case Aircraft aircraft:
                 // FlightStartTime is set as soon as the Battle Bus takes off.
-                if (aircraft.FlightStartTime > 0) SetMatchStart(CurrentTimeSeconds);
+                if (aircraft.FlightStartTime > 0)
+                {
+                    SetMatchStart(CurrentTimeSeconds);
+                }
                 break;
 
             case FortPlayerState fp:
-                if (fp.bInAircraft == true) SetMatchStart(CurrentTimeSeconds);   // fallback if the Aircraft export is missing
+                if (fp.bInAircraft == true) // fallback if the Aircraft export is missing
+                {
+                    SetMatchStart(CurrentTimeSeconds);
+                }
 
                 PlayerStats stats = Stats(channelIndex);
-                stats.Id ??= fp.PlayerId is null ? fp.PlayerID : (int?)fp.PlayerId;
-                stats.EpicId ??= fp.UniqueId ?? fp.UniqueID;
+                stats.Id ??= fp.PlayerId is null
+                    ? fp.PlayerID
+                    : (int?)fp.PlayerId;
+                stats.EpicId ??= fp.UniqueId;
                 stats.BotId ??= fp.BotUniqueId;
-                if (fp.bIsABot is { } bot) stats.IsBot = bot;
-                if (fp.TeamIndex is { } team) stats.TeamIndex = team;
-                if (fp.Place is { } place) stats.Placement = place;
-                if (fp.KillScore is { } kills) stats.Kills = kills;
-                if (fp.TeamKillScore is { } teamKills) stats.TeamKills = teamKills;
+
+                if (fp.bIsABot is { } bot)
+                {
+                    stats.IsBot = bot;
+                }
+
+                if (fp.TeamIndex is { } team)
+                {
+                    stats.TeamIndex = team;
+                }
+
+                if (fp.Place is { } place)
+                {
+                    stats.Placement = place;
+                }
+
+                if (fp.KillScore is { } kills)
+                {
+                    stats.Kills = kills;
+                }
+
+                if (fp.TeamKillScore is { } teamKills)
+                {
+                    stats.TeamKills = teamKills;
+                }
                 break;
 
             case HealthSet health:
@@ -405,42 +717,117 @@ public sealed class FullExportReader : ReplayReader
         }
     }
 
+    private static void AddToList<TKey, TValue>(Dictionary<TKey, List<TValue>> lists, TKey key, TValue value)
+        where TKey : notnull
+    {
+        if (!lists.TryGetValue(key, out List<TValue>? list))
+        {
+            list = [];
+            lists[key] = list;
+        }
+
+        list.Add(value);
+    }
+
+    /// <summary>Stores a knock / revive of a pawn (only real changes of <c>bIsDBNO</c>).</summary>
+    private void TrackDowned(ChannelGuid pawnGuid, bool downed)
+    {
+        if (_pawnDownedChanges.TryGetValue(pawnGuid, out List<(float T, bool Downed)>? changes) && changes[^1].Downed == downed)
+        {
+            return;
+        }
+
+        AddToList(_pawnDownedChanges, pawnGuid, (CurrentTimeSeconds, downed));
+    }
+
     /// <summary>
-    /// Health history and derived damage. The HealthSet properties are not nullable, so "not sent" cannot be told apart from 0;
-    /// a value counts as sent if it or the matching max value is greater than 0.
+    /// <c>true</c> if the victim pawn was already knocked when the hit was fired.
+    /// The damage cues are batched and arrive up to ~75 ms AFTER <c>bIsDBNO</c> (measured on the skin cup replays),
+    /// so the fatal hit that knocks a player is not a hit on a downed player.
+    /// </summary>
+    private bool WasDownedBeforeHit(ChannelGuid pawnGuid, bool fatal)
+    {
+        if (!_pawnDownedChanges.TryGetValue(pawnGuid, out List<(float T, bool Downed)>? changes))
+        {
+            return false;
+        }
+
+        (float t, bool downed) = changes[^1];
+        float sinceChange = CurrentTimeSeconds - t;
+
+        if (downed && fatal && sinceChange < KnockCueDelaySeconds)
+        {
+            return false;
+        }
+
+        if (sinceChange >= SameFrameSeconds)
+        {
+            return downed;
+        }
+
+        return changes.Count > 1 && changes[^2].Downed;
+    }
+
+    /// <summary>
+    /// Stores the pawn position (at most once per position interval) and sums up the traveled distance.
+    /// Like Epic's "distance traveled" only the horizontal distance counts and skydiving / gliding is left out
+    /// (checked on the skin cup replays: 36.8 km vs. Epic's 35.6 km over 11 matches; with height and skydiving it was 51 km).
+    /// </summary>
+    private void TrackPosition(ChannelGuid pawnGuid, FVector location)
+    {
+        (bool skydiving, bool parachute) = _pawnInAir.GetValueOrDefault(pawnGuid);
+        bool inAir = skydiving || parachute;
+
+        if (!inAir && MatchStartTime is { } start && CurrentTimeSeconds >= start && _pawnLastLocation.TryGetValue(pawnGuid, out FVector? last))
+        {
+            double dx = location.X - last.X;
+            double dy = location.Y - last.Y;
+            double step = Math.Sqrt((dx * dx) + (dy * dy));
+            if (step < MaxMovementStep)
+            {
+                _pawnDistance[pawnGuid] = _pawnDistance.GetValueOrDefault(pawnGuid) + step;
+            }
+        }
+
+        _pawnLastLocation[pawnGuid] = location;
+
+        if (_pawnPositions.TryGetValue(pawnGuid, out List<PositionSample>? positions) && CurrentTimeSeconds - positions[^1].T < _positionInterval)
+        {
+            return;
+        }
+
+        AddToList(_pawnPositions, pawnGuid, new PositionSample(CurrentTimeSeconds, location));
+    }
+
+    /// <summary>
+    /// Health history and derived damage. The HealthSet values are nullable: <c>null</c> = not sent in this update,
+    /// then the previous value is kept. A value that was never sent is 0 (the default is not replicated).
     /// </summary>
     private void TrackHealth(ChannelIndex channelIndex, HealthSet hs)
     {
-        bool hasHealth = hs.HealthMaxValue > 0 || hs.HealthCurrentValue > 0;
-        bool hasShield = hs.ShieldMaxValue > 0 || hs.ShieldCurrentValue > 0;
-        if (!hasHealth && !hasShield)
+        bool hasHealth = hs.HealthCurrentValue is not null;
+        bool hasShield = hs.ShieldCurrentValue is not null;
+        if (!hasHealth && !hasShield && hs.HealthMaxValue is null && hs.ShieldMaxValue is null)
         {
             return;
         }
 
         _lastHealth.TryGetValue(channelIndex, out Health previousHealthState);
-        float hp = hasHealth
-            ? hs.HealthCurrentValue
-            : previousHealthState.Hp;
-        float shield = hasShield
-            ? hs.ShieldCurrentValue
-            : previousHealthState.Shield;
+        float hp = hs.HealthCurrentValue ?? previousHealthState.Hp;
+        float shield = hs.ShieldCurrentValue ?? previousHealthState.Shield;
 
         _lastHealth[channelIndex] = new Health(hp, shield);
 
-        float maxHp = hs.HealthMaxValue > 0
-            ? hs.HealthMaxValue
-            : _maxHealth.GetValueOrDefault(channelIndex).Hp;
-        float maxShield = hs.ShieldMaxValue > 0
-            ? hs.ShieldMaxValue
-            : _maxHealth.GetValueOrDefault(channelIndex).Shield;
+        float maxHp = hs.HealthMaxValue ?? _maxHealth.GetValueOrDefault(channelIndex).Hp;
+        float maxShield = hs.ShieldMaxValue ?? _maxHealth.GetValueOrDefault(channelIndex).Shield;
 
         _maxHealth[channelIndex] = new Health(maxHp, maxShield);
 
         PlayerStats stats = Stats(channelIndex);
+        stats.SetMaxHealthAndShield(maxHp, maxShield);
+
         if (stats.HealthTimeline.Count == 0)
         {
-            stats.SetMaxHealthAndShield(maxHp, maxShield);
             stats.HealthTimeline.Add(new HealthSample(CurrentTimeSeconds, hp, shield));
         }
         else if (stats.HealthTimeline[^1].Health != hp || stats.HealthTimeline[^1].Shield != shield)
@@ -485,6 +872,13 @@ public sealed class FullExportReader : ReplayReader
             weaponGuid = new ChannelGuid(sinceChange < SameFrameSeconds && ws.Previous != 0 ? ws.Previous : ws.Current);
         }
 
+        // Newer replays name the weapon in the cue itself; that is exact and wins over the guess from the pawn.
+        bool weaponFromCue = cue.SourceWeapon is > 0;
+        if (weaponFromCue)
+        {
+            weaponGuid = new ChannelGuid(cue.SourceWeapon!.Value);
+        }
+
         ChannelGuid? victim = cue.HitActor is > 0
             ? new ChannelGuid(cue.HitActor.Value)
             : null;
@@ -506,8 +900,9 @@ public sealed class FullExportReader : ReplayReader
             ShieldDestroyed: cue.bIsShieldDestroyed == true,
             Location: cue.Location,
             WeaponGuid: weaponGuid,
+            WeaponFromCue: weaponFromCue,
             SecondsSinceWeaponChange: float.IsPositiveInfinity(sinceChange) ? -1 : sinceChange,
-            VictimDowned: victim is { } v && _pawnDowned.GetValueOrDefault(v),
+            VictimDowned: victim is { } v && WasDownedBeforeHit(v, cue.bIsFatal == true),
             StructureAmount: structureAmount
         );
         _pendingHits.Add(pendingHit);
@@ -527,8 +922,8 @@ public sealed class FullExportReader : ReplayReader
 
         public static bool Any(INetFieldExportGroup group, HashSet<string>? exclude)
         {
-            var key = (group.GetType(), exclude is not null);
-            if (!Cache.TryGetValue(key, out var check)) Cache[key] = check = Build(key.Item1, exclude);
+            (Type, bool) key = (group.GetType(), exclude is not null);
+            if (!Cache.TryGetValue(key, out Func<object, bool>? check)) Cache[key] = check = Build(key.Item1, exclude);
             return check(group);
         }
 

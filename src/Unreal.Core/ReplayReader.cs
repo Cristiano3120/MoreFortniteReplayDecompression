@@ -93,13 +93,18 @@ public abstract class ReplayReader<T> where T : Replay, new()
     /// </summary>
     private uint?[] IgnoringChannels = new uint?[DefaultMaxChannelSize]; // channel index, actorguid
 
-    public ReplayReader(ILogger logger, ParseMode mode)
+    public ReplayReader(ILogger logger, ParseMode mode) : this(logger, mode, null)
+    {
+    }
+
+    /// <param name="ignoredExportGroups">Export group types that are skipped while parsing, see <see cref="NetFieldParser"/>.</param>
+    public ReplayReader(ILogger logger, ParseMode mode, IReadOnlySet<Type>? ignoredExportGroups)
     {
         _logger = logger;
         _parseMode = mode;
 
         _netGuidCache = new NetGuidCache();
-        _netFieldParser = new NetFieldParser(_netGuidCache, mode);
+        _netFieldParser = new NetFieldParser(_netGuidCache, mode, ignoredTypes: ignoredExportGroups);
     }
 
     /// <summary>

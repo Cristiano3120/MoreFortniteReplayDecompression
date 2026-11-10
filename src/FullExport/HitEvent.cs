@@ -36,10 +36,16 @@ public sealed class HitEvent
     /// </summary>
     public string? Weapon { get; init; }
 
+    /// <summary><c>true</c>: <see cref="Weapon"/> comes from the cue itself (<c>SourceWeapon</c>, exact); <c>false</c>: guessed from the attacker's held weapon.</summary>
+    public bool IsWeaponFromCue { get; init; }
+
     /// <summary>Seconds between the attacker's last weapon change and this hit; -1 if no weapon was known.</summary>
     public float SecondsSinceWeaponChange { get; init; }
 
-    /// <summary>The victim was knocked down (DBNO) when the hit arrived.</summary>
+    /// <summary>
+    /// The victim was already knocked down (DBNO) before the hit arrived. The hit that knocks a player is not a hit on a downed player.
+    /// Note: Fortnite sends hits on downed players with a magnitude of 0, so their damage is not in the replay.
+    /// </summary>
     public bool VictimWasDowned { get; init; }
 
     /// <summary>Attacker and victim are on the same team (different players).</summary>
