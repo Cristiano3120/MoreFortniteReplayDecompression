@@ -1,7 +1,8 @@
 using FortniteReplayReader.Models.NetFieldExports;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
+using MoreFortniteReplayDecompression.Players;
 
-namespace MoreFortniteReplayDecompression;
+namespace MoreFortniteReplayDecompression.Export;
 
 /// <summary>
 /// Controls what is read from a replay. Everything that is switched off is not parsed at all (the parser skips the data),

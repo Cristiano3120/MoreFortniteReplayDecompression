@@ -1,4 +1,6 @@
-namespace MoreFortniteReplayDecompression;
+using MoreFortniteReplayDecompression.Match;
+
+namespace MoreFortniteReplayDecompression.Players;
 
 /// <summary>Match-wide values a <see cref="PlayerStats"/> needs to compute its sums.</summary>
 /// <param name="MatchStart">Replay time of the Battle Bus start, <c>null</c> if unknown (then everything counts).</param>

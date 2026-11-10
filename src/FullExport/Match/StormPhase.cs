@@ -1,6 +1,6 @@
 using Unreal.Core.Models;
 
-namespace MoreFortniteReplayDecompression;
+namespace MoreFortniteReplayDecompression.Match;
 
 /// <summary>
 /// One shrink of the storm. Between <see cref="StartT"/> and <see cref="EndT"/> the safe zone moves from

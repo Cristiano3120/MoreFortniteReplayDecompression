@@ -1,7 +1,7 @@
 using FortniteReplayReader.Models;
 using Unreal.Core.Models;
 
-namespace MoreFortniteReplayDecompression;
+namespace MoreFortniteReplayDecompression.Match;
 
 /// <summary>Builds the storm phases of a match and answers where the safe zone was at a given time.</summary>
 public static class Storm

@@ -1,75 +1,11 @@
 using FortniteReplayReader.Models;
+using MoreFortniteReplayDecompression.Match;
+using MoreFortniteReplayDecompression.Players;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
+using MoreFortniteReplayDecompression.TimelineEvents;
 using Unreal.Core.Contracts;
-using Unreal.Core.Models;
 
-namespace MoreFortniteReplayDecompression;
-
-/// <summary>
-/// Base of every timeline entry. All entries are time series samples, so each one carries a time and the channel it came from.
-/// </summary>
-public abstract record TimelineEvent
-{
-    /// <summary>
-    /// Replay time in seconds since the start of the recording (the time of the demo frame the update was read in).
-    /// This is not the in-game clock; the first frame is at about 0.
-    /// </summary>
-    public required float T { get; init; }
-
-    /// <summary>
-    /// Actor channel the update belongs to. Channel numbers are reused for different actors during a replay,
-    /// so a channel only identifies an actor at a given time, never a player permanently.
-    /// </summary>
-    public required ChannelIndex Channel { get; init; }
-}
-
-/// <summary>One update of an export group (for example <c>PlayerPawn</c>, <c>HealthSet</c>, <c>SafeZoneIndicator</c>).</summary>
-public sealed record ExportEvent : TimelineEvent
-{
-    /// <summary>Class name of <see cref="Group"/>.</summary>
-    public required string Type { get; init; }
-
-    /// <summary>Snapshot of the group. Only properties that were sent in this update are set; the rest is <c>null</c> or <c>default</c>.</summary>
-    public required INetFieldExportGroup Group { get; init; }
-}
-
-/// <summary>An update of a replicated list element (for example an inventory item or a stat counter).</summary>
-public sealed record NetDeltaEvent : TimelineEvent
-{
-    public required string Type { get; init; }
-    public required int ElementIndex { get; init; }
-    public required bool Deleted { get; init; }
-    public required INetFieldExportGroup Group { get; init; }
-}
-
-/// <summary>An actor appeared. Contains its class (archetype) and spawn transform.</summary>
-public sealed record ChannelOpenedEvent : TimelineEvent
-{
-    public uint? ActorGuid { get; init; }
-    public string? Archetype { get; init; }
-    public FVector? Location { get; init; }
-    public FRotator? Rotation { get; init; }
-}
-
-/// <summary>An actor was destroyed or went out of relevance. Its channel number can be reused afterwards.</summary>
-public sealed record ChannelClosedEvent : TimelineEvent
-{
-    public uint? ActorGuid { get; init; }
-    public string? Archetype { get; init; }
-}
-
-/// <summary>
-/// Derived damage: decrease of health plus shield between two <c>HealthSet</c> updates of a player.
-/// The replay does not say who caused it.
-/// </summary>
-public sealed record DerivedDamageEvent : TimelineEvent
-{
-    public required float Amount { get; init; }
-    public required float Health { get; init; }
-    public required float Shield { get; init; }
-    public required float HealthAfter { get; init; }
-    public required float ShieldAfter { get; init; }
-}
+namespace MoreFortniteReplayDecompression.Export;
 
 /// <summary>Complete result: the library's standard result plus the time series as typed objects.</summary>
 public sealed class ReplayExport

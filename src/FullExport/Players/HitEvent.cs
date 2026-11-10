@@ -1,7 +1,7 @@
-﻿using MoreFortniteReplayDecompression.StronglyTypedIds;
+using MoreFortniteReplayDecompression.StronglyTypedIds;
 using Unreal.Core.Models;
 
-namespace MoreFortniteReplayDecompression;
+namespace MoreFortniteReplayDecompression.Players;
 
 /// <summary>
 /// A single hit taken from the <c>BatchedDamageCues</c> RPC of the replay (attacker, target, damage, flags).

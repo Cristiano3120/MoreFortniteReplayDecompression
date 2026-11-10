@@ -1,6 +1,6 @@
 using Unreal.Core.Models;
 
-namespace MoreFortniteReplayDecompression;
+namespace MoreFortniteReplayDecompression.Match;
 
 /// <summary>A supply drop of the match.</summary>
 public sealed record SupplyDropInfo

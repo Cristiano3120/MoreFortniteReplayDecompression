@@ -1,4 +1,5 @@
-namespace MoreFortniteReplayDecompression;
+
+namespace MoreFortniteReplayDecompression.Match;
 
 /// <summary>How far a player was away from a supply drop when it appeared.</summary>
 /// <param name="Drop">The supply drop.</param>

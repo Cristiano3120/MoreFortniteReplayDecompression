@@ -1,4 +1,5 @@
-namespace MoreFortniteReplayDecompression;
+
+namespace MoreFortniteReplayDecompression.Players;
 
 /// <summary>A knock or an elimination from the kill feed of the replay.</summary>
 public sealed class EliminationEvent

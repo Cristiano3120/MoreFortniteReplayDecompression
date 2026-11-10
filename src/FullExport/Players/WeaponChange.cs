@@ -1,4 +1,5 @@
-namespace MoreFortniteReplayDecompression;
+
+namespace MoreFortniteReplayDecompression.Players;
 
 /// <summary>The player switched to another weapon / item.</summary>
 /// <param name="T">Replay time in seconds since the start of the recording.</param>

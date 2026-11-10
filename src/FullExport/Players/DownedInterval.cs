@@ -1,4 +1,5 @@
-namespace MoreFortniteReplayDecompression;
+
+namespace MoreFortniteReplayDecompression.Players;
 
 /// <summary>Time span in which a player was knocked down (DBNO).</summary>
 /// <param name="Start">Replay time of the knock.</param>

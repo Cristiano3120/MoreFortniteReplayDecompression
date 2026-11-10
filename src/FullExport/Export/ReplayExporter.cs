@@ -1,7 +1,9 @@
 using FortniteReplayReader.Models;
+using MoreFortniteReplayDecompression.Players;
+using MoreFortniteReplayDecompression.Reading;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
 
-namespace MoreFortniteReplayDecompression;
+namespace MoreFortniteReplayDecompression.Export;
 
 /// <summary>Entry point: reads a replay and returns the standard result plus per-player statistics and (optionally) the typed timeline.</summary>
 public static class ReplayExporter

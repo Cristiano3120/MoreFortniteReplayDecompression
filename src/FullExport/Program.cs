@@ -1,5 +1,8 @@
 ﻿using System.Diagnostics;
 
+using MoreFortniteReplayDecompression.Export;
+using MoreFortniteReplayDecompression.Players;
+
 namespace MoreFortniteReplayDecompression;
 
 internal class Program
