@@ -56,10 +56,10 @@ internal class Program
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             Console.WriteLine("Match: " + ++matchCount);
-
+            
             ReplayExport export = ReplayExporter.Read(filepath, ExportSettings.StatsOnly);
             PlayerStats bergii = export.Players.Where(x => x.Name == "Detect Bergii yh").First();
-
+  
             stopwatch.Stop();
             msUsedComputing += stopwatch.ElapsedMilliseconds;
 
@@ -117,7 +117,7 @@ internal class Program
         Console.WriteLine($"Bergii Distance: {bergiiDistance:F0}m | {epicTraveled / 100}m");
         Console.WriteLine();
         Console.WriteLine("Time over " + matchCount + " matches: " + msUsedComputing / 1000 + "s");
-
+        
         matchCount = 0;
         msUsedComputing = 0;
         foreach (string filepath in Directory.EnumerateFiles("C:\\Users\\Cristiano\\Desktop\\FCS\\MatchReplay\\ArtixReplays"))

@@ -145,7 +145,7 @@ public sealed class FullExportReader : ReplayReader
     /// </summary>
     public List<PlayerStats> BuildPlayers(FortniteReplay replay)
     {
-        List<PlayerStats> players = _stats.Values.Where(p => p.Id is not null).ToList();
+        List<PlayerStats> players = [.. _stats.Values.Where(p => p.Id is not null)];
         Dictionary<int?, PlayerData> byId = replay.PlayerData.Where(d => d.Id is not null).GroupBy(d => d.Id).ToDictionary(g => g.Key, g => g.First());
 
         ChannelIndex? recorderChannel = replay.GameData.RecorderId is { } recorderId && _guidChannel.TryGetValue(new ChannelGuid(recorderId), out ChannelIndex channel)
@@ -172,6 +172,7 @@ public sealed class FullExportReader : ReplayReader
         AssignHits();
         AssignPawnData();
         AssignEliminations(replay, players);
+        AssignTeammates(replay.TeamData, players);
 
         FinishContext context = new(MatchStartTime, matchEnd, StormPhases, SupplyDrops);
         foreach (PlayerStats? p in players)
@@ -347,6 +348,26 @@ public sealed class FullExportReader : ReplayReader
 
             creditedTo?.RawEliminations.Add(e);
             eliminated?.RawDeaths.Add(e);
+        }
+    }
+
+    private static void AssignTeammates(IEnumerable<TeamData> teamDatas, List<PlayerStats> players)
+    {
+        //TeamIndex -> list of player IDs
+        Dictionary<int, List<int?>> playerIdToTeamIndex = teamDatas.ToDictionary(t => t.TeamIndex ?? -1, t => t.PlayerIds.ToList());
+        foreach (PlayerStats player in players)
+        {
+            if (player.TeamIndex is { } teamIndex && playerIdToTeamIndex.TryGetValue(teamIndex, out List<int?>? teammateIds))
+            {
+                foreach (int? teammateId in teammateIds)
+                {
+                    PlayerStats? teammate = players.FirstOrDefault(p => p.Id == teammateId);
+                    if (teammate is not null && teammate != player)
+                    {
+                        player.Teammates.Add(teammate);
+                    }
+                }
+            }
         }
     }
 

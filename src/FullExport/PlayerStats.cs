@@ -191,6 +191,8 @@ public sealed class PlayerStats
     /// <summary>Every weapon / item the player switched to, in replay order.</summary>
     public List<WeaponChange> EquippedWeapons { get; } = [];
 
+    public List<PlayerStats> Teammates { get; } = [];
+
     /// <summary>Recomputes all sums and lists; only events from the match start on count.</summary>
     internal void Finish(FinishContext context)
     {

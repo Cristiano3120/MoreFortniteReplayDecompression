@@ -28,7 +28,7 @@ public static class ReplayExporter
         FullExportReader reader = new(settings);
         FortniteReplay replay = reader.ReadReplay(path);
         List<PlayerStats> players = reader.BuildPlayers(replay);
-
+        
         return new ReplayExport
         {
             Replay = replay,
