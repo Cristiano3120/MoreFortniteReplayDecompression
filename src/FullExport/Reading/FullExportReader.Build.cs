@@ -41,6 +41,7 @@ public sealed partial class FullExportReader
 
         AssignHits();
         AssignPawnData();
+        AssignBuilds();
         AssignEliminations(replay, players);
         AssignTeammates(replay.TeamData, players);
 
@@ -198,7 +199,7 @@ public sealed partial class FullExportReader
                 {
                     openKnocks[eliminated] = (t, eliminator);
                 }
-                else if (openKnocks.Remove(eliminated, out (float T, PlayerStats? Knocker) knock) && !WasRevived(eliminated, knock.T, t))
+                else if (openKnocks.Remove(eliminated, out (float T, PlayerStats? Knocker) knock) && t - knock.T <= MaxKnockSeconds && !WasRevived(eliminated, knock.T, t))
                 {
                     creditedTo = knock.Knocker ?? eliminator;
                 }

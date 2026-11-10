@@ -36,6 +36,7 @@ public sealed partial class PlayerStats
     internal List<(float T, float Amount)> RawHealthLoss { get; } = [];
     internal List<(float T, bool Downed)> RawDownedChanges { get; } = [];
     internal List<WeaponChange> RawWeaponChanges { get; } = [];
+    internal List<BuildEvent> RawBuilds { get; } = [];
     internal List<EliminationEvent> RawEliminations { get; } = [];
     internal List<EliminationEvent> RawDeaths { get; } = [];
     internal double RawDistance { get; set; }
@@ -49,8 +50,8 @@ public sealed partial class PlayerStats
     public int? Placement { get; internal set; }
 
     /// <summary>
-    /// Kill score of the FortPlayerState (server value, the most reliable kill count). Matched Epic's end-of-match eliminations in 10 of 11
-    /// skin cup matches; the one difference was a rebooted player that was eliminated a second time (counts here, not at Epic).
+    /// Kill score of the FortPlayerState (server value at the end of the recording). Like <see cref="Eliminations"/> it keeps counting
+    /// after this player was eliminated, so it can be higher than Epic's value (see <see cref="EliminationsBeforeDeath"/>).
     /// </summary>
     public uint? Kills { get; internal set; }
     public uint? TeamKills { get; internal set; }
@@ -74,15 +75,52 @@ public sealed partial class PlayerStats
     public int Knocks { get; private set; }
 
     /// <summary>
-    /// Eliminations credited to this player (Fortnite's rule: the player who knocked the victim gets it, also if a teammate finished it).
-    /// A rebooted player that is eliminated again counts twice.
+    /// All eliminations credited to this player over the whole match, from the match start to the end of the recording.
+    /// <para>
+    /// Credit follows Fortnite's rule: the player who knocked the victim gets the elimination, also if someone else finished it.
+    /// A rebooted enemy that is eliminated again counts twice (see <see cref="UniqueEliminations"/>).
+    /// </para>
+    /// <para>
+    /// This also counts eliminations that are credited <b>after this player was eliminated</b>: a teammate finishes one of this player's knocks,
+    /// or the last shots / an explosive still eliminate an enemy. Epic does not count those, see <see cref="EliminationsBeforeDeath"/>.
+    /// </para>
     /// </summary>
     public int Eliminations { get; private set; }
+
+    /// <summary>
+    /// Eliminations credited to this player up to and including the moment this player was finally eliminated
+    /// (all of them if the player survived). Same credit rule as <see cref="Eliminations"/>.
+    /// <para>
+    /// This is how Epic counts: the end-of-match stats (<see cref="EpicMatchStats"/>) are written when the player is eliminated,
+    /// so eliminations credited afterwards are missing there. Matched Epic's eliminations in all 11 skin cup matches,
+    /// while <see cref="Eliminations"/> was 2 higher in one match (two eliminations 0.5 s and 3.4 s after the player's death).
+    /// </para>
+    /// Use this to compare with Epic or tournament trackers, and <see cref="Eliminations"/> for everything the player caused.
+    /// </summary>
+    public int EliminationsBeforeDeath { get; private set; }
 
     /// <summary>Different enemies credited to this player (a rebooted player counts once).</summary>
     public int UniqueEliminations { get; private set; }
 
     public List<EliminationEvent> EliminationEvents { get; } = [];
+
+    /// <summary>
+    /// Eliminations of enemies this player damaged in the <see cref="AssistWindowSeconds"/> seconds before they were knocked
+    /// (or eliminated without a knock), credited to someone else.
+    /// </summary>
+    public int Assists => AssistEvents.Count;
+
+    /// <summary>The eliminations counted in <see cref="Assists"/>.</summary>
+    public List<EliminationEvent> AssistEvents { get; } = [];
+
+    /// <summary>Damage at most this many seconds before the knock / elimination counts for an assist.</summary>
+    public const float AssistWindowSeconds = 15f;
+
+    /// <summary>Damage cues arrive slightly after the knock; hits this many seconds after it still count for an assist.</summary>
+    private const float AssistLateHitSeconds = 0.3f;
+
+    /// <summary>A knock older than this (seconds) before the elimination is not the knock of that elimination.</summary>
+    private const float MaxKnockAgeSeconds = 90f;
 
     /// <summary>How often this player was eliminated (more than once after a reboot).</summary>
     public int Deaths { get; private set; }
@@ -194,6 +232,28 @@ public sealed partial class PlayerStats
 
     public List<PlayerStats> Teammates { get; } = [];
 
+    // --- Building and materials
+    /// <summary>Materials one built piece costs (every piece type and material).</summary>
+    public const int MaterialsPerBuild = 10;
+
+    /// <summary>
+    /// Pieces this player built since the match start (edits are not builds). The replay only says which team built a piece,
+    /// so it is given to the nearest teammate. Pieces built while out of the recording client's relevance are missing.
+    /// </summary>
+    public List<BuildEvent> Builds { get; } = [];
+
+    /// <summary>Materials spent on <see cref="Builds"/>, per material.</summary>
+    public Materials MaterialsUsed { get; private set; }
+
+    /// <summary>
+    /// Materials gathered (Epic's end-of-match value), only for the replay owner, otherwise <c>null</c>.
+    /// The replay contains neither the inventory nor the harvesting of any player, so there is no split per material.
+    /// </summary>
+    public uint? MaterialsGathered => EpicMatchStats?.MaterialsGathered;
+
+    /// <summary>Materials used according to Epic's end-of-match stats, only for the replay owner (to compare with <see cref="MaterialsUsed"/>).</summary>
+    public uint? EpicMaterialsUsed => EpicMatchStats?.MaterialsUsed;
+
     /// <summary>Position at replay time <paramref name="t"/> (nearest sample), <c>null</c> if no sample is close enough.</summary>
     public FVector? PositionAt(float t)
     {
@@ -220,6 +280,23 @@ public sealed partial class PlayerStats
         return best is { } sample && Math.Abs(sample.T - t) <= MaxSampleGapSeconds
             ? sample.Location
             : null;
+    }
+
+    /// <summary>Materials this player spent on building from the match start until replay time <paramref name="t"/>.</summary>
+    public Materials MaterialsUsedUntil(float t)
+    {
+        Materials used = new();
+        foreach (BuildEvent build in Builds)
+        {
+            if (build.T > t)
+            {
+                break;
+            }
+
+            used = used.Add(build.Material, MaterialsPerBuild);
+        }
+
+        return used;
     }
 
     /// <summary><c>true</c> if the player was knocked down at replay time <paramref name="t"/>.</summary>

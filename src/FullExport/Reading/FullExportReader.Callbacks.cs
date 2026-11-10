@@ -29,6 +29,7 @@ public sealed partial class FullExportReader
         }
 
         _channelArchetype[channelIndex] = archetype;
+        RegisterBuildChannel(channelIndex, archetype, channelActor?.Location);
 
         if (archetype is not null && archetype.Contains("AthenaSupplyDrop_C", StringComparison.Ordinal))
         {

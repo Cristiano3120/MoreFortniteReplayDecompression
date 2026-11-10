@@ -13,11 +13,33 @@ public sealed partial class PlayerStats
 
         FinishDamage(start);
         FinishEliminations(start, context.MatchEnd);
+        FinishAssists(start);
         FinishHealth(start);
         FinishMovement(start, context);
 
+        FinishBuilds(start);
+
         EquippedWeapons.Clear();
         EquippedWeapons.AddRange(RawWeaponChanges);
+    }
+
+    private void FinishBuilds(float start)
+    {
+        Builds.Clear();
+        Materials used = new();
+
+        foreach (BuildEvent build in RawBuilds.OrderBy(b => b.T))
+        {
+            if (build.T < start)
+            {
+                continue;
+            }
+
+            Builds.Add(build);
+            used = used.Add(build.Material, MaterialsPerBuild);
+        }
+
+        MaterialsUsed = used;
     }
 
     private void FinishDamage(float start)
@@ -157,6 +179,55 @@ public sealed partial class PlayerStats
 
         float alive = (DeathTime ?? matchEnd) - (float.IsNegativeInfinity(start) ? 0 : start);
         TimeAlive = Math.Max(0, alive);
+
+        float deathTime = DeathTime ?? float.PositiveInfinity;
+        EliminationsBeforeDeath = EliminationEvents.Count(e => !e.IsKnock && e.T <= deathTime);
+    }
+
+    /// <summary>
+    /// Eliminations of enemies this player damaged in the <see cref="AssistWindowSeconds"/> before the enemy was knocked
+    /// (or eliminated, if there was no knock), while the elimination is credited to someone else. Hits on the downed enemy do not count.
+    /// </summary>
+    private void FinishAssists(float start)
+    {
+        AssistEvents.Clear();
+
+        IEnumerable<PlayerStats> victims = RawDealt
+            .Where(h => h.T >= start && h.Amount > 0 && !h.VictimWasDowned && !h.IsTeamDamage && !h.IsSelfDamage && h.Victim is not null)
+            .Select(h => h.Victim!)
+            .Distinct();
+
+        foreach (PlayerStats victim in victims)
+        {
+            foreach (EliminationEvent elimination in victim.RawDeaths)
+            {
+                if (elimination.IsKnock || elimination.T < start || elimination.CreditedTo is null || elimination.CreditedTo == this ||
+                    elimination.IsSelfElimination || elimination.IsTeamElimination)
+                {
+                    continue;
+                }
+
+                float reference = victim.RawDeaths
+                    .Where(k => k.IsKnock && k.T <= elimination.T && elimination.T - k.T <= MaxKnockAgeSeconds)
+                    .Select(k => k.T)
+                    .DefaultIfEmpty(elimination.T)
+                    .Max();
+
+                bool damaged = RawDealt.Any(h =>
+                    h.Victim == victim &&
+                    h.Amount > 0 &&
+                    !h.VictimWasDowned &&
+                    h.T <= reference + AssistLateHitSeconds &&
+                    reference - h.T <= AssistWindowSeconds);
+
+                if (damaged)
+                {
+                    AssistEvents.Add(elimination);
+                }
+            }
+        }
+
+        AssistEvents.Sort((a, b) => a.T.CompareTo(b.T));
     }
 
     private void FinishHealth(float start)

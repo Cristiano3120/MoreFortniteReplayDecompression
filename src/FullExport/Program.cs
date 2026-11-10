@@ -9,12 +9,9 @@ internal class Program
 {
     public static void Main()
     {
-        //Guck ob du perf improven kannst
-        //ersetz of durch propertys (=> ) die of callen z.B HealthUpdates => .Of<HealthSet> mach das für jede class
-        //für die es möglich ist oder guck ist glaube schon in PlayerStast
         //außer für PlayerStats lass das so wie das gerade ist als property
-        //Inventar: seit 43.00 läuft das über /Script/ItemizationCoreRuntime.InventoryReplicator (noch kein Model), FortInventory kommt nicht mehr
-        //Builds: die Build-Models in FortniteReplayReader\Models\NetFieldExports\Builds sind pro Pfad hart codiert und auf ParseMode.Debug
+        //Inventar: seit 43.00 nur noch /Script/ItemizationCoreRuntime.InventoryReplicator mit RootInventory, die Items selbst (und damit Mats im Inventar) sind nicht im Replay
+        //Harvesting: ClientRemotePlayerDamagedResourceBuilding wird nicht aufgezeichnet, gefarmte Mats gibt es nur als Epic-Wert für den Replay-Owner
         //Schreib test: Convert ein replay in Json und gleich dann immer mit neuer version ab?
 
         int matchCount = 0;
@@ -62,7 +59,7 @@ internal class Program
             
             ReplayExport export = ReplayExporter.Read(filepath, ExportSettings.StatsOnly);
             PlayerStats bergii = export.Players.Where(x => x.Name == "Detect Bergii yh").First();
-  
+
             stopwatch.Stop();
             msUsedComputing += stopwatch.ElapsedMilliseconds;
 

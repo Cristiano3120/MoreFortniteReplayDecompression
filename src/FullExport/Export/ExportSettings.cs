@@ -1,4 +1,5 @@
 using FortniteReplayReader.Models.NetFieldExports;
+using FortniteReplayReader.Models.NetFieldExports.Builds;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
 using MoreFortniteReplayDecompression.Players;
 
@@ -37,6 +38,9 @@ public sealed class ExportSettings
     /// <summary>Weapon changes of the players (<see cref="PlayerStats.EquippedWeapons"/>).</summary>
     public bool TrackWeapons { get; init; } = true;
 
+    /// <summary>Pieces the players built (<see cref="PlayerStats.Builds"/>, <see cref="PlayerStats.MaterialsUsed"/>). Off: build actors are not parsed.</summary>
+    public bool TrackBuilds { get; init; } = true;
+
     /// <summary>Further export group types of the library that should not be parsed, for example <c>typeof(SupplyDropLlama)</c>.</summary>
     public IReadOnlySet<Type> IgnoredExportGroups { get; init; } = new HashSet<Type>();
 
@@ -48,6 +52,11 @@ public sealed class ExportSettings
         if (!TrackHealth)
         {
             ignored.Add(typeof(HealthSet));
+        }
+
+        if (!TrackBuilds)
+        {
+            ignored.Add(typeof(PlayerBuild));
         }
 
         if (!TrackHits)

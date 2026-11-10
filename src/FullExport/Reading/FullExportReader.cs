@@ -80,14 +80,27 @@ public sealed partial class FullExportReader : ReplayReader
     // (the pawn names its PlayerState with a delay), so hits are assigned to players in BuildPlayers.
     private readonly List<PendingHit> _pendingHits = [];
 
+    // Builds: open build channels, build actors already seen, the current location of every pawn and the new pieces.
+    private readonly Dictionary<ChannelIndex, (BuildMaterial Material, string Piece, FVector? Location)> _buildChannels = new();
+    private readonly HashSet<ChannelGuid> _seenBuilds = new();
+    private readonly Dictionary<ChannelGuid, List<(float T, HeldTool Tool)>> _pawnToolChanges = new();
+    private readonly Dictionary<ChannelGuid, FVector> _pawnCurrentLocation = new();
+    private readonly List<PendingBuild> _pendingBuilds = [];
+
     /// <summary>A shot is delivered in the same frame as a weapon change at most this many seconds apart: it still belongs to the old weapon.</summary>
     private const float SameFrameSeconds = 0.02f;
 
     /// <summary>The cue of the hit that knocks a player arrives at most this many seconds after the player's <c>bIsDBNO</c>.</summary>
     private const float KnockCueDelaySeconds = 0.25f;
 
-    /// <summary>A knocked player whose knock ended this many seconds before the elimination was revived in between.</summary>
-    private const float ReviveToleranceSeconds = 0.5f;
+    /// <summary>
+    /// A knocked player whose knock ended more than this many seconds before the elimination was revived in between.
+    /// When a knocked player is finished, <c>bIsDBNO</c> turns off up to ~0.8 s before the kill feed entry (skin cup replays).
+    /// </summary>
+    private const float ReviveToleranceSeconds = 2f;
+
+    /// <summary>A knock older than this (seconds) is not credited any more: the player was revived or rebooted while not relevant.</summary>
+    private const float MaxKnockSeconds = 90f;
 
     private sealed class WeaponState
     {

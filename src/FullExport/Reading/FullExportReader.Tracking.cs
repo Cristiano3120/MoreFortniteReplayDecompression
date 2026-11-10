@@ -1,4 +1,5 @@
 using FortniteReplayReader.Models.NetFieldExports;
+using FortniteReplayReader.Models.NetFieldExports.Builds;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
 using MoreFortniteReplayDecompression.Players;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
@@ -67,6 +68,7 @@ public sealed partial class FullExportReader
                         ws.Previous = ws.Current;
                         ws.Current = weapon;
                         ws.ChangedAt = CurrentTimeSeconds;
+                        TrackToolChange(pawnGuid, weapon);
 
                         if (_settings.TrackWeapons)
                         {
@@ -81,11 +83,20 @@ public sealed partial class FullExportReader
                     _pawnInAir[pawnGuid] = (pawn.bIsSkydiving ?? air.Skydiving, pawn.bIsParachuteOpen ?? air.Parachute);
                 }
 
-                if (_settings.TrackPositions && pawn.ReplicatedMovement?.Location is { } location)
+                if (pawn.ReplicatedMovement?.Location is { } location)
                 {
-                    TrackPosition(pawnGuid, location);
+                    _pawnCurrentLocation[pawnGuid] = location;
+
+                    if (_settings.TrackPositions)
+                    {
+                        TrackPosition(pawnGuid, location);
+                    }
                 }
 
+                break;
+
+            case PlayerBuild build:
+                TrackBuild(channelIndex, build);
                 break;
 
             case GameState gameState:
