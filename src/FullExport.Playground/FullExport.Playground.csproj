@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<!-- FullExport hides the forked library projects from its references (they are bundled in its NuGet package), so they are referenced here too -->
+	<ItemGroup>
+		<ProjectReference Include="..\FullExport\MoreFortniteReplayDecompression.csproj" />
+		<ProjectReference Include="..\FortniteReplayReader\FortniteReplayReader.csproj" />
+		<ProjectReference Include="..\Unreal.Core\Unreal.Core.csproj" />
+	</ItemGroup>
+</Project>

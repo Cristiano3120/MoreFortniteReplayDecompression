@@ -1,23 +1,58 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<OutputType>Exe</OutputType>
 		<TargetFramework>net10.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<AssemblyName>MoreFortniteReplayDecompression</AssemblyName>
 		<RootNamespace>MoreFortniteReplayDecompression</RootNamespace>
-        <StartupObject>MoreFortniteReplayDecompression.Program</StartupObject>
 	</PropertyGroup>
+
+	<!-- NuGet package -->
+	<PropertyGroup>
+		<IsPackable>true</IsPackable>
+		<PackageId>MoreFortniteReplayDecompression</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>Cristiano3120</Authors>
+		<Copyright>Copyright © 2026 Cristiano3120, based on FortniteReplayDecompressor by Shiqan</Copyright>
+		<Description>Fortnite replay parser with detailed stats for every player: damage, hits, eliminations, assists, health, builds, materials, movement, storm and more.</Description>
+		<PackageTags>Fortnite Replay Parser Stats Unreal Engine</PackageTags>
+		<PackageProjectUrl>https://github.com/Cristiano3120/MoreFortniteReplayDecompression</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Cristiano3120/MoreFortniteReplayDecompression</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+		<!-- The forked library DLLs are put into this package (see IncludeForkedLibraries) -->
+		<TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeForkedLibraries</TargetsForTfmSpecificBuildOutput>
+	</PropertyGroup>
+
 	<ItemGroup>
-	  <ProjectReference Include="..\BenchmarkReader\BenchmarkReader.csproj" />
-	  <ProjectReference Include="..\ConsoleReader\ConsoleReader.csproj" />
-	  <ProjectReference Include="..\FortniteReplayReader.Test\FortniteReplayReader.Test.csproj" />
-	  <ProjectReference Include="..\FortniteReplayReader\FortniteReplayReader.csproj" />
-	  <ProjectReference Include="..\OozSharp.Test\OozSharp.Test.csproj" />
-	  <ProjectReference Include="..\OozSharp\OozSharp.csproj" />
-	  <ProjectReference Include="..\Unreal.Core.Test\Unreal.Core.Test.csproj" />
-	  <ProjectReference Include="..\Unreal.Core\Unreal.Core.csproj" />
-	  <ProjectReference Include="..\Unreal.Encryption.Test\Unreal.Encryption.Test.csproj" />
-	  <ProjectReference Include="..\Unreal.Encryption\Unreal.Encryption.csproj" />
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+		<None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
 	</ItemGroup>
+
+	<!--
+		The library projects are forked and patched, so they can't be dependencies on the NuGet packages of the original project.
+		PrivateAssets="all" keeps them out of the package dependencies, and IncludeForkedLibraries puts their DLLs into the package.
+	-->
+	<ItemGroup>
+		<ProjectReference Include="..\FortniteReplayReader\FortniteReplayReader.csproj" PrivateAssets="all" />
+		<ProjectReference Include="..\Unreal.Core\Unreal.Core.csproj" PrivateAssets="all" />
+	</ItemGroup>
+
+	<!-- Dependency of the forked libraries, so it must be a dependency of this package -->
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+	</ItemGroup>
+
+	<Target Name="IncludeForkedLibraries" DependsOnTargets="ResolveReferences">
+		<ItemGroup>
+			<BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+		</ItemGroup>
+	</Target>
 </Project>

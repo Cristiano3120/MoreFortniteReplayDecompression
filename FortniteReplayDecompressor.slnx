@@ -7,6 +7,7 @@
     <File Path=".github\workflows\publish.yml" />
   </Folder>
   <Project Path="src/FullExport/MoreFortniteReplayDecompression.csproj" />
+  <Project Path="src/FullExport.Playground/FullExport.Playground.csproj" />
   <Project Path="src\BenchmarkReader\BenchmarkReader.csproj" />
   <Project Path="src\ConsoleReader\ConsoleReader.csproj" />
   <Project Path="src\FortniteReplayReader.Test\FortniteReplayReader.Test.csproj" />

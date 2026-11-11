@@ -134,7 +134,7 @@ internal class Program
             msUsedComputing += stopwatch.ElapsedMilliseconds;
 
             Console.WriteLine($"Battle Bus start t: {export.Players.First().MatchStartTime ?? -1}\n");
-
+            
             Console.WriteLine($"Teamkills: {artix.TeamKills}\n");
             Console.WriteLine($"Artix ID: {artix.EpicId}");
             Console.WriteLine($"Artix pre round dmg: {artix.PreMatchDamageDealt}");
