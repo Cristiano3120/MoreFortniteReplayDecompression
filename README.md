@@ -16,7 +16,7 @@ into easy to use stats per player, and fixes a few bugs in the library itself.
 - **Match:** storm phases, supply drops and how far each player was away from them
 - **Settings:** turn off the data you don't need to read replays faster
 
-...and a lot more: more player stats, storm zones, supply drops, weapons used, teammates, the full timeline of every update and more.
+...and a lot more: more player stats, weapons used, teammates, the full timeline of every update and more.
 
 ## Getting Started
 
