@@ -1,88 +1,53 @@
-name: Publish Packages
+name: Publish NuGet Package
+
+# Publishes MoreFortniteReplayDecompression to nuget.org when a version tag is pushed, for example:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+# The package version is taken from the tag (v1.0.0 -> 1.0.0).
+#
+# Uses NuGet trusted publishing, so no API key is stored in this repository.
+# Setup (once):
+#   1. On nuget.org: account menu -> Trusted Publishing -> add a policy for
+#      this repository owner, repository "MoreFortniteReplayDecompression" and workflow file "publish.yml".
+#   2. On GitHub: Settings -> Secrets and variables -> Actions -> add the secret NUGET_USER
+#      with your nuget.org user name (not your email).
 
 on:
   push:
-    branches: [ master ]
+    tags: [ 'v*' ]
 
 permissions:
-  contents: write
+  contents: read
+  id-token: write # needed to get the OIDC token for trusted publishing
 
 jobs:
-  build_and_publish:
+  publish:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, '#ignore') }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.x
 
-      - run: dotnet build --configuration Release
-      - run: dotnet test --configuration Release
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Get next version
-        id: versioning
-        uses: anothrNick/github-tag-action@4ed44965e0db8dab2b466a16da04aec3cc312fd8 # 1.75.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEFAULT_BUMP: patch
-          WITH_V: false
-          DRY_RUN: true
-          PRERELEASE: false
-          RELEASE_BRANCHES: master
+      - run: dotnet build --configuration Release -p:Version=${{ steps.version.outputs.version }}
+      - run: dotnet test --configuration Release --no-build
 
-      - name: Pack OozSharp
-        run: dotnet pack ./src/OozSharp/OozSharp.csproj -c Release -p:PackageVersion=${{ steps.versioning.outputs.new_tag }} --output ./OozSharp
+      - name: Pack
+        run: dotnet pack ./src/FullExport/MoreFortniteReplayDecompression.csproj -c Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ./artifacts/nuget
 
-      - name: Publish OozSharp
-        run: dotnet nuget push ./OozSharp/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_TOKEN }} --no-symbols
-
-      - name: Update Unreal.Encryption Reference
-        run: sed -i 's/ProjectReference Include="..\\OozSharp\\OozSharp.csproj"/PackageReference Include="OozSharp" Version="${{ steps.versioning.outputs.new_tag }}"/' ./src/Unreal.Encryption/Unreal.Encryption.csproj
-
-      - name: Pack Unreal.Encryption
-        uses: nick-invision/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      - name: NuGet login (gets a short-lived API key)
+        uses: NuGet/login@v1
+        id: login
         with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 300
-          command: dotnet nuget locals http-cache -c && dotnet pack ./src/Unreal.Encryption/Unreal.Encryption.csproj -c Release -p:PackageVersion=${{ steps.versioning.outputs.new_tag }} --output ./Unreal.Encryption
+          user: ${{ secrets.NUGET_USER }}
 
-      - name: Publish Unreal.Encryption
-        run: dotnet nuget push ./Unreal.Encryption/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_TOKEN }} --no-symbols
-
-      - name: Pack Unreal.Core
-        run: dotnet pack ./src/Unreal.Core/Unreal.Core.csproj -c Release -p:PackageVersion=${{ steps.versioning.outputs.new_tag }} --output ./Unreal.Core
-
-      - name: Publish Unreal.Core
-        run: dotnet nuget push ./Unreal.Core/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_TOKEN }} --no-symbols
-
-      - name: Update FortniteReplayReader References
-        run: |
-          sed -i 's/ProjectReference Include="..\\Unreal.Core\\Unreal.Core.csproj"/PackageReference Include="Unreal.Core" Version="${{ steps.versioning.outputs.new_tag }}"/' ./src/FortniteReplayReader/FortniteReplayReader.csproj
-          sed -i 's/ProjectReference Include="..\\Unreal.Encryption\\Unreal.Encryption.csproj"/PackageReference Include="Unreal.Encryption" Version="${{ steps.versioning.outputs.new_tag }}"/' ./src/FortniteReplayReader/FortniteReplayReader.csproj
-
-      - name: Pack FortniteReplayReader
-        uses: nick-invision/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 300
-          command: dotnet nuget locals http-cache -c && dotnet pack ./src/FortniteReplayReader/FortniteReplayReader.csproj -c Release -p:PackageVersion=${{ steps.versioning.outputs.new_tag }} --output ./FortniteReplayReader
-
-      - name: Publish FortniteReplayReader
-        run: dotnet nuget push ./FortniteReplayReader/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_TOKEN }} --no-symbols
-
-      - name: Bump version and push tag
-        uses: anothrNick/github-tag-action@4ed44965e0db8dab2b466a16da04aec3cc312fd8 # 1.75.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEFAULT_BUMP: patch
-          WITH_V: false
-          PRERELEASE: false
-          RELEASE_BRANCHES: master
+      - name: Publish
+        run: dotnet nuget push ./artifacts/nuget/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
