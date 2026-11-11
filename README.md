@@ -22,11 +22,10 @@ into easy to use stats per player, and fixes a few bugs in the library itself.
 
 .NET 10.0 is required.
 
-> A NuGet package is coming soon. Until then, clone this repository and add a reference to the `FullExport` project:
+Install the [NuGet package](https://www.nuget.org/packages/MoreFortniteReplayDecompression):
 
 ```powershell
-git clone https://github.com/Cristiano3120/MoreFortniteReplayDecompression.git
-dotnet add reference MoreFortniteReplayDecompression/src/FullExport/MoreFortniteReplayDecompression.csproj
+dotnet add package MoreFortniteReplayDecompression
 ```
 
 Read a replay:
