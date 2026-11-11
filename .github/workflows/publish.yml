@@ -41,7 +41,7 @@ jobs:
       - run: dotnet test --configuration Release --no-build
 
       - name: Pack
-        run: dotnet pack ./src/FullExport/MoreFortniteReplayDecompression.csproj -c Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ./artifacts/nuget
+        run: dotnet pack ./src/FullExport/MoreFortniteReplayDecompression.csproj -c Release -p:Version=${{ steps.version.outputs.version }} --output ./artifacts/nuget
 
       - name: NuGet login (gets a short-lived API key)
         uses: NuGet/login@v1
