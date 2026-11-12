@@ -1,4 +1,4 @@
-using FortniteReplayReader.Models;
+﻿using FortniteReplayReader.Models;
 using FortniteReplayReader.Models.Events;
 using MoreFortniteReplayDecompression.Match;
 using MoreFortniteReplayDecompression.Players;
@@ -43,6 +43,7 @@ public sealed partial class FullExportReader
         AssignPawnData();
         AssignBuilds();
         AssignEliminations(replay, players);
+        MarkFatalCueHits();
         AssignTeammates(replay.TeamData, players);
 
         FinishContext context = new(MatchStartTime, matchEnd, StormPhases, SupplyDrops);
@@ -269,6 +270,9 @@ public sealed partial class FullExportReader
         return _stats.GetValueOrDefault(psChannel);
     }
 
+    private PlayerStats? PlayerOfPlayerState(ChannelGuid? playerStateGuid)
+        => playerStateGuid is { } guid && _guidChannel.TryGetValue(guid, out ChannelIndex channel) ? _stats.GetValueOrDefault(channel) : null;
+
     private string? WeaponClass(ChannelGuid? weaponGuid)
         => weaponGuid is { } guid ? _guidArchetype.GetValueOrDefault(guid) : null;
 
@@ -278,6 +282,7 @@ public sealed partial class FullExportReader
     /// </summary>
     private void AssignHits()
     {
+        _cueHitEvents.Clear();
         foreach (PlayerStats stats in _stats.Values)
         {
             stats.RawDealt.Clear();
@@ -287,7 +292,7 @@ public sealed partial class FullExportReader
 
         foreach (PendingHit pHit in _pendingHits)
         {
-            PlayerStats? attacker = PlayerOfPawn(pHit.AttackerPawn);
+            PlayerStats? attacker = PlayerOfPawn(pHit.AttackerPawn) ?? PlayerOfPlayerState(pHit.AttackerPlayerState);
             PlayerStats? victim = PlayerOfPawn(pHit.Victim);
 
             if (victim is not null)
@@ -315,11 +320,33 @@ public sealed partial class FullExportReader
 
                 victim.RawTaken.Add(hit);
                 attacker?.RawDealt.Add(hit);
+
+                if (pHit.AttackerPlayerState is not null)
+                {
+                    _cueHitEvents.Add(hit);
+                }
             }
             else if (attacker is not null && pHit.StructureAmount > 0)
             {
                 attacker.RawStructure.Add((pHit.T, pHit.StructureAmount));
             }
+        }
+    }
+
+    /// <summary>
+    /// Hits that come from gameplay cues have no "fatal" flag. A hit that knocks is recognized while reading (the victim goes down
+    /// right before the cue); a hit that eliminates directly is recognized here by the elimination of the victim at the same time.
+    /// </summary>
+    private void MarkFatalCueHits()
+    {
+        foreach (HitEvent hit in _cueHitEvents)
+        {
+            if (hit.IsFatal || hit.Victim is not { } victim)
+            {
+                continue;
+            }
+
+            hit.IsFatal = victim.RawDeaths.Any(e => Math.Abs(e.T - hit.T) < KnockCueDelaySeconds && e.CreditedTo == hit.Attacker);
         }
     }
 }

@@ -1,4 +1,4 @@
-using FortniteReplayReader.Models.NetFieldExports;
+﻿using FortniteReplayReader.Models.NetFieldExports;
 using FortniteReplayReader.Models.NetFieldExports.Builds;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
 using MoreFortniteReplayDecompression.Players;
@@ -163,6 +163,22 @@ public sealed partial class FullExportReader
 
             case BatchedDamageCues cue:
                 TrackHit(channelIndex, cue);
+                break;
+
+            case GameplayCueExecuted cue when _settings.TrackHits:
+                if (cue.GameplayCueTag?.TagName is ShieldDamageCue or ShieldDestroyedCue)
+                {
+                    TrackCueHit(channelIndex, cue.Parameters?.EffectContext, shield: cue.Parameters?.RawMagnitude ?? 0, health: 0,
+                        shieldDestroyed: cue.GameplayCueTag.TagName == ShieldDestroyedCue);
+                }
+                break;
+
+            case GameplayCueExecutedFromSpec spec when _settings.TrackHits:
+                float damage = spec.ModifiedAttributes?.Where(a => a?.AttributeName == DamageAttribute).Sum(a => a.TotalMagnitude ?? 0) ?? 0;
+                if (damage > 0)
+                {
+                    TrackCueHit(channelIndex, spec.EffectContext, shield: 0, health: damage, shieldDestroyed: false);
+                }
                 break;
         }
     }
@@ -362,5 +378,75 @@ public sealed partial class FullExportReader
             StructureAmount: structureAmount
         );
         _pendingHits.Add(pendingHit);
+    }
+
+    /// <summary>
+    /// Hits of projectile weapons (for example the slingshot) are not part of <c>BatchedDamageCues</c>. They are reported as
+    /// gameplay cues on the VICTIM's pawn instead: a <c>GameplayCue.Damage.Shielded</c> cue with the shield damage and a cue
+    /// from the gameplay effect spec with the health damage (attribute <c>Damage</c>). Both name the attacker's PlayerState
+    /// (instigator), the weapon (effect causer) and the hit result. The parts of one hit arrive in the same frame and are merged.
+    /// </summary>
+    private void TrackCueHit(ChannelIndex victimPawnChannel, FGameplayEffectContextHandle? context, float shield, float health, bool shieldDestroyed)
+    {
+        // Only weapon hits have a hit result on the victim; damage over time (bleeding while knocked, ...) has none.
+        if (context?.HitResult is not { } hitResult || context.Instigator == 0 || context.EffectCauser == 0 ||
+            !_channelGuid.TryGetValue(victimPawnChannel, out ChannelGuid victim) || hitResult.Actor != victim.Value)
+        {
+            return;
+        }
+
+        var key = (victim, new ChannelGuid(context.Instigator), new ChannelGuid(context.EffectCauser));
+        bool isShieldDamage = !shieldDestroyed && health == 0;
+        bool isHealth = health > 0;
+
+        if (_cueHits.TryGetValue(key, out CueHit? cueHit) && CurrentTimeSeconds - _pendingHits[cueHit.Index].T < CueHitMergeSeconds &&
+            !(isShieldDamage && cueHit.HasShield) && !(shieldDestroyed && cueHit.HasShieldDestroyed) && !(isHealth && cueHit.HasHealth))
+        {
+            PendingHit known = _pendingHits[cueHit.Index];
+
+            // "Shield destroyed" and "shield damage" of the same hit carry the same amount: it only counts once.
+            float addedShield = cueHit.HasShield || cueHit.HasShieldDestroyed ? 0 : shield;
+            _pendingHits[cueHit.Index] = known with
+            {
+                Amount = known.Amount + addedShield + health,
+                Shield = known.Shield || shield > 0,
+                ShieldDestroyed = known.ShieldDestroyed || shieldDestroyed,
+            };
+
+            cueHit.HasShield |= isShieldDamage;
+            cueHit.HasShieldDestroyed |= shieldDestroyed;
+            cueHit.HasHealth |= isHealth;
+            return;
+        }
+
+        // The cue has no "fatal" flag: the hit knocked the victim if the victim went down right before the cue arrived.
+        bool fatal = _pawnDownedChanges.TryGetValue(victim, out List<(float T, bool Downed)>? changes) && changes[^1].Downed &&
+            CurrentTimeSeconds - changes[^1].T < KnockCueDelaySeconds;
+
+        _cueHits[key] = new CueHit
+        {
+            Index = _pendingHits.Count,
+            HasShield = isShieldDamage,
+            HasShieldDestroyed = shieldDestroyed,
+            HasHealth = isHealth,
+        };
+        _pendingHits.Add(new PendingHit
+        (
+            T: CurrentTimeSeconds,
+            AttackerPawn: null,
+            Victim: victim,
+            Amount: shield + health,
+            Critical: string.Equals(hitResult.BoneName, HeadBone, StringComparison.OrdinalIgnoreCase),
+            Fatal: fatal,
+            Shield: shield > 0,
+            ShieldDestroyed: shieldDestroyed,
+            Location: hitResult.ImpactPoint ?? hitResult.Location,
+            WeaponGuid: new ChannelGuid(context.EffectCauser),
+            WeaponFromCue: true,
+            SecondsSinceWeaponChange: -1,
+            VictimKnockTime: KnockTimeBeforeHit(victim, fatal),
+            StructureAmount: 0,
+            AttackerPlayerState: new ChannelGuid(context.Instigator)
+        ));
     }
 }

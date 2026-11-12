@@ -20,6 +20,15 @@ public class PlayerPawnCache
 
     [NetFieldExportRPC("NetMulticast_InvokeGameplayCueAdded_WithParams", "/Script/FortniteGame.FortPawn:NetMulticast_InvokeGameplayCueAdded_WithParams", isFunction: true)]
     public GameplayCue InvokeGameplayCueAdded { get; set; }
+
+    [NetFieldExportRPC("NetMulticast_InvokeGameplayCueExecuted_WithParams", "/Script/FortniteGame.FortPawn:NetMulticast_InvokeGameplayCueExecuted_WithParams", isFunction: true)]
+    public GameplayCue InvokeGameplayCueExecuted { get; set; }
+
+    [NetFieldExportRPC("NetMulticast_InvokeGameplayCueExecuted_FromSpec", "/Script/FortniteGame.FortPawn:NetMulticast_InvokeGameplayCueExecuted_FromSpec", isFunction: true)]
+    public GameplayCueFromSpec InvokeGameplayCueExecutedFromSpec { get; set; }
+
+    [NetFieldExportRPC("NetMulticast_InvokeGameplayCueAddedAndWhileActive_FromSpec", "/Script/FortniteGame.FortPawn:NetMulticast_InvokeGameplayCueAddedAndWhileActive_FromSpec", isFunction: true)]
+    public GameplayCueFromSpec InvokeGameplayCueAddedFromSpec { get; set; }
 }
 
 [NetFieldExportGroup("/Game/Athena/PlayerPawn_Athena.PlayerPawn_Athena_C", minimalParseMode: ParseMode.Minimal)]

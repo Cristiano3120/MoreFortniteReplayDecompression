@@ -98,6 +98,16 @@ public class FHitResult : IProperty
     public uint Actor { get; private set; }
 
     /// <summary>
+    /// Manager of the hit instance if the hit object is a lightweight instance instead of an actor.
+    /// </summary>
+    public uint InstanceManager { get; private set; }
+
+    /// <summary>
+    /// Index of the hit instance in <see cref="InstanceManager"/>.
+    /// </summary>
+    public int InstanceIndex { get; private set; }
+
+    /// <summary>
     /// PrimitiveComponent hit by the trace.
     /// </summary>
     public uint Component { get; private set; }
@@ -154,12 +164,12 @@ public class FHitResult : IProperty
         }
         else
         {
-            Actor = reader.SerializePropertyObject();
-
+            // FActorInstanceHandle: actor, instance index (-1 if the hit object is a normal actor) and manager.
+            // The order is taken from current Fortnite replays.
             // see https://github.com/EpicGames/UnrealEngine/blob/4564529ed77196caada6971f5de1be829900b9e1/Engine/Source/Runtime/Engine/Private/EngineTypes.cpp#L558
-            //Ar << Handle.Actor;
-            //Ar << Handle.Manager;
-            //Ar << Handle.InstanceIndex;
+            Actor = reader.SerializePropertyObject();
+            InstanceIndex = reader.ReadInt32();
+            InstanceManager = reader.SerializePropertyObject();
         }
 
         Component = reader.SerializePropertyObject();

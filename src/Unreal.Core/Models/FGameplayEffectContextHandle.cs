@@ -52,6 +52,12 @@ public class FGameplayEffectContextHandle : IProperty
     public bool IsValid { get; private set; }
 
     /// <summary>
+    /// Number of bits after the known part of the context that were skipped (data of the game specific subclass,
+    /// and everything that follows the context in the same property).
+    /// </summary>
+    public int GameSpecificBits { get; private set; }
+
+    /// <summary>
     /// NetGUID of the script struct of the context (<c>FGameplayEffectContext</c> or a game specific subclass such as <c>FFortGameplayEffectContext</c>).
     /// </summary>
     public uint ScriptStruct { get; private set; }
@@ -107,13 +113,18 @@ public class FGameplayEffectContextHandle : IProperty
             }
             if ((RepBits & (1 << 6)) > 0)
             {
-                WorldOrigin = reader.SerializePropertyVector100();
+                WorldOrigin = reader.ReadFVector();
                 bHasWorldOrigin = true;
             }
             else
             {
                 bHasWorldOrigin = false;
             }
+
+            // Games subclass the context and append their own data, whose layout is unknown (Fortnite: at least 71 bits).
+            // The handle is always the last thing that can be read from its reader, so the rest is skipped.
+            GameSpecificBits = reader.GetBitsLeft();
+            reader.SkipBits(GameSpecificBits);
         }
     }
 }

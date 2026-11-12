@@ -133,11 +133,10 @@ public class FGameplayCueParameters : IProperty
             EffectContext = new FGameplayEffectContextHandle();
             EffectContext.Serialize(reader);
 
-            // Games subclass the context and append their own data (Fortnite: 71 more bits) whose layout is unknown.
-            // If the context is the last field, the rest of the property belongs to it and is skipped.
-            if (RepBits >> ((int)RepFlag.REP_EffectContext + 1) == 0)
+            // A valid context ends with data of the game specific subclass whose length is unknown (see
+            // FGameplayEffectContextHandle.GameSpecificBits), so the fields after it cannot be located any more.
+            if (EffectContext.IsValid)
             {
-                reader.SkipBits(reader.GetBitsLeft());
                 return;
             }
         }

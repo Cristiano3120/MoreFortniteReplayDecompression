@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using FortniteReplayReader;
 using FortniteReplayReader.Models;
 using FortniteReplayReader.Models.NetFieldExports;
@@ -80,6 +80,29 @@ public sealed partial class FullExportReader : ReplayReader
     // (the pawn names its PlayerState with a delay), so hits are assigned to players in BuildPlayers.
     private readonly List<PendingHit> _pendingHits = [];
 
+    // Hits that are reported as gameplay cues on the victim (projectile weapons). Shield and health damage of one hit
+    // arrive as separate cues; the key finds the hit they belong to.
+    private readonly Dictionary<(ChannelGuid Victim, ChannelGuid Instigator, ChannelGuid Causer), CueHit> _cueHits = new();
+    private readonly List<HitEvent> _cueHitEvents = [];
+
+    /// <summary>
+    /// The cues of one hit (shield damage, shield destroyed, health damage) arrive at most this many seconds apart
+    /// (up to ~40 ms in client replays). A part that already arrived starts a new hit instead.
+    /// </summary>
+    private const float CueHitMergeSeconds = 0.1f;
+
+    /// <summary>Cue of a hit that only damaged the shield, or the shield part of a hit that went through.</summary>
+    private const string ShieldDamageCue = "GameplayCue.Damage.Shielded";
+
+    /// <summary>Cue of a hit that broke the shield. It repeats the amount of <see cref="ShieldDamageCue"/>.</summary>
+    private const string ShieldDestroyedCue = "GameplayCue.Shield.Destroyed";
+
+    /// <summary>Attribute of a gameplay effect spec that holds the health damage of a hit.</summary>
+    private const string DamageAttribute = "Damage";
+
+    /// <summary>Bone name of a head shot in the hit result of a cue.</summary>
+    private const string HeadBone = "Head";
+
     // Builds: open build channels, build actors already seen, the current location of every pawn and the new pieces.
     private readonly Dictionary<ChannelIndex, (BuildMaterial Material, string Piece, FVector? Location)> _buildChannels = new();
     private readonly HashSet<ChannelGuid> _seenBuilds = new();
@@ -109,9 +132,19 @@ public sealed partial class FullExportReader : ReplayReader
         public float ChangedAt = float.NegativeInfinity;
     }
 
+    /// <summary>A hit built from cues: its index in <see cref="_pendingHits"/> and the parts that already arrived.</summary>
+    private sealed class CueHit
+    {
+        public int Index;
+        public bool HasShield;
+        public bool HasShieldDestroyed;
+        public bool HasHealth;
+    }
+
     private sealed record PendingHit(
         float T, ChannelGuid? AttackerPawn, ChannelGuid? Victim, float Amount, bool Critical, bool Fatal, bool Shield, bool ShieldDestroyed,
-        FVector? Location, ChannelGuid? WeaponGuid, bool WeaponFromCue, float SecondsSinceWeaponChange, float? VictimKnockTime, float StructureAmount);
+        FVector? Location, ChannelGuid? WeaponGuid, bool WeaponFromCue, float SecondsSinceWeaponChange, float? VictimKnockTime, float StructureAmount,
+        ChannelGuid? AttackerPlayerState = null);
 
     private readonly Dictionary<ChannelIndex, PlayerStats> _stats = new();
 

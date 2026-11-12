@@ -1,4 +1,4 @@
-using Unreal.Core.Models;
+﻿using Unreal.Core.Models;
 using Unreal.Core.Models.Enums;
 using Xunit;
 
@@ -113,6 +113,7 @@ public class GameplayCueSerializationTest
         Assert.Equal(1u, parameters.EffectContext.ScriptStruct);
         Assert.Equal(15842u, parameters.EffectContext.Instigator);
         Assert.Equal(33092u, parameters.EffectContext.EffectCauser);
+        Assert.Equal(71, parameters.EffectContext.GameSpecificBits);
         Assert.True(reader.AtEnd());
         Assert.False(reader.IsError);
     }
@@ -131,5 +132,45 @@ public class GameplayCueSerializationTest
         Assert.Equal(42.5f, parameters.RawMagnitude);
         Assert.Null(parameters.EffectContext);
         Assert.True(reader.AtEnd());
+    }
+
+    /// <summary>Effect context of a projectile hit on a building, taken from a Fortnite replay (hit result, world origin, Fortnite data).</summary>
+    private static readonly byte[] ContextWithHitResult =
+    [
+        0x05, 0xDE, 0xB3, 0x9A, 0xB3, 0x9A, 0xD3, 0x9C, 0xDB, 0x9C, 0x78, 0xAA, 0x2D, 0x40, 0x3F, 0x50,
+        0xCE, 0x33, 0x5E, 0x42, 0x23, 0x02, 0xB5, 0x88, 0x8E, 0xA3, 0x24, 0x4F, 0x28, 0xE7, 0x19, 0x2F,
+        0xA1, 0x11, 0x01, 0xF4, 0xE8, 0x0C, 0x92, 0xB0, 0x92, 0x00, 0x9A, 0x7B, 0xA6, 0x4C, 0xB8, 0x42,
+        0xB0, 0xE3, 0x96, 0xFD, 0x40, 0xF0, 0xFF, 0xFF, 0xFF, 0x0F, 0xD0, 0x58, 0x47, 0x10, 0x00, 0x20,
+        0x19, 0x85, 0xDD, 0x5D, 0x37, 0x3A, 0x1B, 0xC8, 0xBD, 0xC7, 0x76, 0xC8, 0x82, 0xDB, 0x1B, 0x78,
+        0x74, 0x07, 0xB1, 0x33, 0x49, 0x4A, 0x12, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x08
+    ];
+
+    [Fact]
+    public void EffectContextWithHitResult()
+    {
+        NetBitReader reader = new(ContextWithHitResult, 772) { EngineNetworkVersion = EngineNetworkVersionHistory.LATEST };
+        FGameplayEffectContextHandle context = new();
+        context.Serialize(reader);
+
+        Assert.True(context.IsValid);
+        Assert.Equal(9945u, context.Instigator);
+        Assert.Equal(9945u, context.EffectCauser);
+        Assert.Equal(10089u, context.AbilityCDO);
+        Assert.Equal(10093u, context.SourceObject);
+
+        Assert.NotNull(context.HitResult);
+        Assert.Equal(33772u, context.HitResult.Actor);
+        Assert.Equal(-1, context.HitResult.InstanceIndex);
+        Assert.Equal(40262u, context.HitResult.Component);
+        Assert.Equal("None", context.HitResult.BoneName);
+        Assert.Equal(26524, context.HitResult.Location.X, 0.5);
+        Assert.Equal(-31556, context.HitResult.Location.Y, 0.5);
+
+        Assert.True(context.bHasWorldOrigin);
+        Assert.Equal(26438.92, context.WorldOrigin.X, 0.01);
+        Assert.Equal(71, context.GameSpecificBits);
+        Assert.True(reader.AtEnd());
+        Assert.False(reader.IsError);
     }
 }

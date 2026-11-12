@@ -29,7 +29,7 @@ public sealed class ExportSettings
     /// <summary>Health and shield of the players (<see cref="HealthSet"/>). Off: no health timeline, healing and storm damage.</summary>
     public bool TrackHealth { get; init; } = true;
 
-    /// <summary>Damage cues (<see cref="BatchedDamageCues"/>). Off: no damage dealt / taken and no hits.</summary>
+    /// <summary>Damage cues (<see cref="BatchedDamageCues"/> and the gameplay cues of projectile hits). Off: no damage dealt / taken and no hits.</summary>
     public bool TrackHits { get; init; } = true;
 
     /// <summary>Pawn positions. Off: no time in storm, storm damage, distance traveled and supply drop distances.</summary>
@@ -42,8 +42,10 @@ public sealed class ExportSettings
     public bool TrackBuilds { get; init; } = true;
 
     /// <summary>
-    /// Gameplay cues of the pawns (<see cref="GameplayCueAdded"/>, <see cref="GameplayCueExecuted"/>): effects such as healing, sliding or
-    /// charging a weapon, with tag name, instigator and causer. They only end up in the timeline, so they are not parsed without <see cref="CollectTimeline"/>.
+    /// Gameplay cues of the pawns in the timeline (<see cref="GameplayCueAdded"/>, <see cref="GameplayCueExecuted"/>,
+    /// <see cref="GameplayCueAddedFromSpec"/>, <see cref="GameplayCueExecutedFromSpec"/>): effects such as healing, sliding or
+    /// charging a weapon, with tag name, instigator and causer. Without <see cref="CollectTimeline"/> only the "executed" cues
+    /// are parsed, and only for <see cref="TrackHits"/> (hits of projectile weapons such as the slingshot are reported as cues).
     /// </summary>
     public bool TrackGameplayCues { get; init; } = true;
 
@@ -65,10 +67,18 @@ public sealed class ExportSettings
             ignored.Add(typeof(PlayerBuild));
         }
 
-        if (!TrackGameplayCues || !CollectTimeline)
+        // Cues only end up in the timeline, except the "executed" ones: hits of projectile weapons are reported that way.
+        bool cuesInTimeline = TrackGameplayCues && CollectTimeline;
+        if (!cuesInTimeline)
         {
             ignored.Add(typeof(GameplayCueAdded));
+            ignored.Add(typeof(GameplayCueAddedFromSpec));
+        }
+
+        if (!cuesInTimeline && !TrackHits)
+        {
             ignored.Add(typeof(GameplayCueExecuted));
+            ignored.Add(typeof(GameplayCueExecutedFromSpec));
         }
 
         if (!TrackHits)

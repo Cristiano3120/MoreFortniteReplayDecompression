@@ -1,10 +1,12 @@
-using MoreFortniteReplayDecompression.StronglyTypedIds;
+﻿using MoreFortniteReplayDecompression.StronglyTypedIds;
 using Unreal.Core.Models;
 
 namespace MoreFortniteReplayDecompression.Players;
 
 /// <summary>
-/// A single hit taken from the <c>BatchedDamageCues</c> RPC of the replay (attacker, target, damage, flags).
+/// A single hit (attacker, target, damage, flags). Most hits come from the <c>BatchedDamageCues</c> RPC of the replay.
+/// Hits of projectile weapons such as the slingshot are not part of it; they come from the gameplay cues on the victim
+/// (shield damage cue plus the <c>Damage</c> attribute of the gameplay effect), merged into one hit.
 /// Only hits on players are stored as events; hits on structures and other objects are only summed up in <see cref="PlayerStats"/>.
 /// </summary>
 public sealed class HitEvent
@@ -25,7 +27,11 @@ public sealed class HitEvent
     public float Amount { get; init; }
 
     public bool IsCritical { get; init; }
-    public bool IsFatal { get; init; }
+    /// <summary>
+    /// The hit knocked or eliminated the victim. For hits of projectile weapons (reported as gameplay cues, without such a flag)
+    /// this is derived from the knock or elimination of the victim at the same time.
+    /// </summary>
+    public bool IsFatal { get; internal set; }
     public bool IsShield { get; init; }
     public bool IsShieldDestroyed { get; init; }
     public FVector? Location { get; init; }

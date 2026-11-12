@@ -548,7 +548,8 @@ public class NetFieldParser
             }
         }
 
-        if (replayout == RepLayoutCmdType.Ignore)
+        // Elements are either the group type itself (their fields are exports of the same group) or a primitive type.
+        if (isGroupType ? fieldInfo.ElementTypeId is null : replayout == RepLayoutCmdType.Ignore)
         {
             return null;
         }

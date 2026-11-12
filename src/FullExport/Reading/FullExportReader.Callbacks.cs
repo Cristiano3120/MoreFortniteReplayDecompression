@@ -1,4 +1,5 @@
-using FortniteReplayReader.Models.NetFieldExports;
+﻿using FortniteReplayReader.Models.NetFieldExports;
+using FortniteReplayReader.Models.NetFieldExports.RPC;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
 using MoreFortniteReplayDecompression.TimelineEvents;
 using Unreal.Core.Contracts;
@@ -92,6 +93,12 @@ public sealed partial class FullExportReader
 
         TrackPlayers(channelIndex, exportGroup);
         if (!_collectTimeline)
+        {
+            return;
+        }
+
+        // Executed cues are also parsed for the hits; they only belong in the timeline if cues are wanted there.
+        if (!_settings.TrackGameplayCues && exportGroup is GameplayCue or GameplayCueFromSpec)
         {
             return;
         }
