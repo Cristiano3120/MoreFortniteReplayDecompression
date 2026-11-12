@@ -111,7 +111,7 @@ public sealed partial class FullExportReader : ReplayReader
 
     private sealed record PendingHit(
         float T, ChannelGuid? AttackerPawn, ChannelGuid? Victim, float Amount, bool Critical, bool Fatal, bool Shield, bool ShieldDestroyed,
-        FVector? Location, ChannelGuid? WeaponGuid, bool WeaponFromCue, float SecondsSinceWeaponChange, bool VictimDowned, float StructureAmount);
+        FVector? Location, ChannelGuid? WeaponGuid, bool WeaponFromCue, float SecondsSinceWeaponChange, float? VictimKnockTime, float StructureAmount);
 
     private readonly Dictionary<ChannelIndex, PlayerStats> _stats = new();
 

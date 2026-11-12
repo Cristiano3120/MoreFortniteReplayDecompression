@@ -179,8 +179,34 @@ public sealed partial class PlayerStats
     public int ShieldHits { get; internal set; }
     public int FatalHits { get; internal set; }
 
-    /// <summary>Hits on players that were already knocked. Fortnite sends them with 0 damage, so they count as hits but not as damage.</summary>
+    /// <summary>
+    /// A knocked player is protected for about 2 seconds after the knock: hits in this time have 0 damage.
+    /// Hits within this time after the knock always count as protected.
+    /// Measured on the skin cup replays: all 70 hits in the first second had 0 damage.
+    /// </summary>
+    public const float KnockProtectionSureSeconds = 1f;
+
+    /// <summary>
+    /// Hits between <see cref="KnockProtectionSureSeconds"/> and this time after the knock only count as protected if they have 0 damage,
+    /// because the end of the protection is not exact in the replay (0 damage hits until 1.96 s, sometimes up to 2.8 s; hits with damage from 1.72 s).
+    /// Later hits never count as protected, even with 0 damage.
+    /// </summary>
+    public const float KnockProtectionMaxSeconds = 3f;
+
+    /// <summary>
+    /// Hits on players that were already knocked: <see cref="DownedHitsDuringProtection"/> + <see cref="DownedHitsAfterProtection"/>.
+    /// All of them are also in <see cref="Hits"/>.
+    /// </summary>
     public int DownedHits { get; internal set; }
+
+    /// <summary>
+    /// Hits on knocked players during the knock protection (see <see cref="HitEvent.IsDuringKnockProtection"/>).
+    /// The player is protected in this time, so these hits count as hits but have 0 damage.
+    /// </summary>
+    public int DownedHitsDuringProtection { get; internal set; }
+
+    /// <summary>Hits on knocked players after the protection ended. These hits have normal damage.</summary>
+    public int DownedHitsAfterProtection { get; internal set; }
 
     /// <summary>Damage to structures and other non-player objects (sum only).</summary>
     public float DamageDealtToStructures { get; internal set; }
@@ -196,7 +222,15 @@ public sealed partial class PlayerStats
     public List<HitEvent> PreMatchDamageDealtEvents { get; } = [];
 
     // Breakdown of DamageDealt (these amounts are already included in DamageDealt)
+    /// <summary>Damage to knocked players: <see cref="DamageDealtToDownedDuringProtection"/> + <see cref="DamageDealtToDownedAfterProtection"/>.</summary>
     public float DamageDealtToDowned { get; internal set; }
+
+    /// <summary>Damage to knocked players during the knock protection (see <see cref="DownedHitsDuringProtection"/>). Should always be 0.</summary>
+    public float DamageDealtToDownedDuringProtection { get; internal set; }
+
+    /// <summary>Damage to knocked players after the protection ended.</summary>
+    public float DamageDealtToDownedAfterProtection { get; internal set; }
+
     public float DamageDealtToTeammates { get; internal set; }
     public float DamageDealtToSelf { get; internal set; }
 

@@ -44,9 +44,24 @@ public sealed class HitEvent
 
     /// <summary>
     /// The victim was already knocked down (DBNO) before the hit arrived. The hit that knocks a player is not a hit on a downed player.
-    /// Note: Fortnite sends hits on downed players with a magnitude of 0, so their damage is not in the replay.
+    /// Note: a knocked player is protected for about 2 seconds (see <see cref="IsDuringKnockProtection"/>).
+    /// Hits in this time arrive with a magnitude of 0 (<see cref="Amount"/> is 0). Later hits on the downed player have normal damage.
     /// </summary>
-    public bool VictimWasDowned { get; init; }
+    public bool VictimWasDowned => SecondsSinceVictimKnocked is not null;
+
+    /// <summary>Seconds between the knock of the victim and this hit; <c>null</c> if the victim was not knocked (see <see cref="VictimWasDowned"/>).</summary>
+    public float? SecondsSinceVictimKnocked { get; init; }
+
+    /// <summary>
+    /// The hit is on a downed player during the knock protection (about 2 seconds after the knock):
+    /// <list type="bullet">
+    /// <item>within <see cref="PlayerStats.KnockProtectionSureSeconds"/> after the knock: always protected</item>
+    /// <item>up to <see cref="PlayerStats.KnockProtectionMaxSeconds"/> after the knock: only protected if the hit has 0 damage</item>
+    /// <item>later: never protected</item>
+    /// </list>
+    /// </summary>
+    public bool IsDuringKnockProtection => SecondsSinceVictimKnocked is float seconds &&
+        (seconds < PlayerStats.KnockProtectionSureSeconds || (seconds < PlayerStats.KnockProtectionMaxSeconds && Amount == 0));
 
     /// <summary>Attacker and victim are on the same team (different players).</summary>
     public bool IsTeamDamage { get; init; }

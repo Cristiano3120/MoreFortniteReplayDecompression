@@ -191,15 +191,15 @@ public sealed partial class FullExportReader
     }
 
     /// <summary>
-    /// <c>true</c> if the victim pawn was already knocked when the hit was fired.
+    /// Replay time of the knock if the victim pawn was already knocked when the hit was fired, otherwise <c>null</c>.
     /// The damage cues are batched and arrive up to ~75 ms AFTER <c>bIsDBNO</c> (measured on the skin cup replays),
     /// so the fatal hit that knocks a player is not a hit on a downed player.
     /// </summary>
-    private bool WasDownedBeforeHit(ChannelGuid pawnGuid, bool fatal)
+    private float? KnockTimeBeforeHit(ChannelGuid pawnGuid, bool fatal)
     {
         if (!_pawnDownedChanges.TryGetValue(pawnGuid, out List<(float T, bool Downed)>? changes))
         {
-            return false;
+            return null;
         }
 
         (float t, bool downed) = changes[^1];
@@ -207,15 +207,21 @@ public sealed partial class FullExportReader
 
         if (downed && fatal && sinceChange < KnockCueDelaySeconds)
         {
-            return false;
+            return null;
         }
 
         if (sinceChange >= SameFrameSeconds)
         {
-            return downed;
+            return downed ? t : null;
         }
 
-        return changes.Count > 1 && changes[^2].Downed;
+        // The last change is in the same frame as the hit, so the state before it counts
+        if (changes.Count > 1 && changes[^2].Downed)
+        {
+            return changes[^2].T;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -352,7 +358,7 @@ public sealed partial class FullExportReader
             WeaponGuid: weaponGuid,
             WeaponFromCue: weaponFromCue,
             SecondsSinceWeaponChange: float.IsPositiveInfinity(sinceChange) ? -1 : sinceChange,
-            VictimDowned: victim is { } v && WasDownedBeforeHit(v, cue.bIsFatal == true),
+            VictimKnockTime: victim is { } v ? KnockTimeBeforeHit(v, cue.bIsFatal == true) : null,
             StructureAmount: structureAmount
         );
         _pendingHits.Add(pendingHit);

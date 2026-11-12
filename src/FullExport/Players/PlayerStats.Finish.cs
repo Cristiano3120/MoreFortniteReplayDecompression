@@ -50,6 +50,8 @@ public sealed partial class PlayerStats
         PreMatchDamageTakenEvents.Clear();
         DamageDealt = 0; Hits = 0; CriticalHits = 0; ShieldHits = 0; FatalHits = 0; DownedHits = 0; PreMatchDamageDealt = 0; PreMatchHits = 0;
         DamageDealtToDowned = 0; DamageDealtToTeammates = 0; DamageDealtToSelf = 0;
+        DownedHitsDuringProtection = 0; DownedHitsAfterProtection = 0;
+        DamageDealtToDownedDuringProtection = 0; DamageDealtToDownedAfterProtection = 0;
         DamageTaken = 0; HitsTaken = 0; PreMatchDamageTaken = 0;
         DamageDealtToStructures = 0; StructureHits = 0;
 
@@ -86,6 +88,17 @@ public sealed partial class PlayerStats
             {
                 DownedHits++;
                 DamageDealtToDowned += hit.Amount;
+
+                if (hit.IsDuringKnockProtection)
+                {
+                    DownedHitsDuringProtection++;
+                    DamageDealtToDownedDuringProtection += hit.Amount;
+                }
+                else
+                {
+                    DownedHitsAfterProtection++;
+                    DamageDealtToDownedAfterProtection += hit.Amount;
+                }
             }
 
             if (hit.IsTeamDamage)

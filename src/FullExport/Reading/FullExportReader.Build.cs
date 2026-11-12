@@ -308,7 +308,7 @@ public sealed partial class FullExportReader
                     Weapon = WeaponClass(pHit.WeaponGuid),
                     IsWeaponFromCue = pHit.WeaponFromCue,
                     SecondsSinceWeaponChange = pHit.SecondsSinceWeaponChange,
-                    VictimWasDowned = pHit.VictimDowned,
+                    SecondsSinceVictimKnocked = pHit.VictimKnockTime is { } knockTime ? pHit.T - knockTime : null,
                     IsSelfDamage = attacker is not null && attacker == victim,
                     IsTeamDamage = attacker is not null && attacker != victim && attacker.TeamIndex is not null && attacker.TeamIndex == victim.TeamIndex,
                 };
