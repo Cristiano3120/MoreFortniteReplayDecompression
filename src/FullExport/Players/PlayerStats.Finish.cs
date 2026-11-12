@@ -53,6 +53,7 @@ public sealed partial class PlayerStats
         DownedHitsDuringProtection = 0; DownedHitsAfterProtection = 0;
         DamageDealtToDownedDuringProtection = 0; DamageDealtToDownedAfterProtection = 0;
         DamageTaken = 0; HitsTaken = 0; PreMatchDamageTaken = 0;
+        ProjectileDamageDealt = 0; ProjectileHits = 0; ProjectileDamageTaken = 0;
         DamageDealtToStructures = 0; StructureHits = 0;
 
         // Unknown as soon as one hit has no overkill value (the replay has no health data of that victim).
@@ -72,6 +73,12 @@ public sealed partial class PlayerStats
             DamageDealt += hit.Amount;
             Hits++;
             overkill += hit.Overkill;
+
+            if (hit.IsProjectileHit)
+            {
+                ProjectileHits++;
+                ProjectileDamageDealt += hit.Amount;
+            }
 
             if (hit.IsCritical)
             {
@@ -130,6 +137,11 @@ public sealed partial class PlayerStats
             DamageTakenEvents.Add(hit);
             DamageTaken += hit.Amount;
             HitsTaken++;
+
+            if (hit.IsProjectileHit)
+            {
+                ProjectileDamageTaken += hit.Amount;
+            }
         }
 
         foreach ((float t, float amount) in RawStructure)

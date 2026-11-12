@@ -315,6 +315,7 @@ public sealed partial class FullExportReader
                     IsWeaponFromCue = pHit.WeaponFromCue,
                     SecondsSinceWeaponChange = pHit.SecondsSinceWeaponChange,
                     SecondsSinceVictimKnocked = pHit.VictimKnockTime is { } knockTime ? pHit.T - knockTime : null,
+                    IsProjectileHit = pHit.AttackerPlayerState is not null,
                     IsSelfDamage = attacker is not null && attacker == victim,
                     IsTeamDamage = attacker is not null && attacker != victim && attacker.TeamIndex is not null && attacker.TeamIndex == victim.TeamIndex,
                 };

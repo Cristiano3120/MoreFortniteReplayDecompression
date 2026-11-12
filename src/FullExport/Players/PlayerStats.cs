@@ -182,6 +182,20 @@ public sealed partial class PlayerStats
     public float DamageDealt { get; internal set; }
 
     /// <summary>
+    /// Part of <see cref="DamageDealt"/> that was dealt with projectile weapons: weapons that shoot a real projectile which flies
+    /// to the target, such as the slingshot or a launcher (see <see cref="HitEvent.IsProjectileHit"/>).
+    /// This damage is already included in <see cref="DamageDealt"/>; the property only shows it separately.
+    /// Some trackers do not count this damage, see <see cref="DamageDealtWithoutProjectiles"/>.
+    /// </summary>
+    public float ProjectileDamageDealt { get; internal set; }
+
+    /// <summary><see cref="DamageDealt"/> without <see cref="ProjectileDamageDealt"/>: only the damage of weapons that hit instantly.</summary>
+    public float DamageDealtWithoutProjectiles => DamageDealt - ProjectileDamageDealt;
+
+    /// <summary>Hits with projectile weapons (see <see cref="ProjectileDamageDealt"/>). All of them are also in <see cref="Hits"/>.</summary>
+    public int ProjectileHits { get; internal set; }
+
+    /// <summary>
     /// Part of <see cref="DamageDealt"/> that went beyond the health and shield the victims had left (sum of <see cref="HitEvent.Overkill"/>).
     /// <para>
     /// Only available in server replays. The overkill of a hit needs the health of the victim, and a normal (client) replay only
@@ -261,6 +275,12 @@ public sealed partial class PlayerStats
 
     // --- Damage taken (BatchedDamageCues, victim = this player)
     public float DamageTaken { get; internal set; }
+
+    /// <summary>
+    /// Part of <see cref="DamageTaken"/> that came from projectile weapons such as the slingshot (see <see cref="HitEvent.IsProjectileHit"/>).
+    /// Already included in <see cref="DamageTaken"/>.
+    /// </summary>
+    public float ProjectileDamageTaken { get; internal set; }
     public int HitsTaken { get; internal set; }
     public List<HitEvent> DamageTakenEvents { get; } = [];
 

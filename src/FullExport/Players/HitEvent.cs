@@ -67,6 +67,15 @@ public sealed class HitEvent
     /// </summary>
     public string? Weapon { get; init; }
 
+    /// <summary>
+    /// The hit comes from a projectile weapon: a weapon that shoots a real projectile which flies to the target, such as the
+    /// slingshot or a launcher, instead of hitting instantly like a rifle or a shotgun.
+    /// The replay reports these hits differently (as gameplay cues on the victim instead of <c>BatchedDamageCues</c>),
+    /// which is how they are recognized. They count as normal hits everywhere (<see cref="PlayerStats.DamageDealt"/>,
+    /// <see cref="PlayerStats.Hits"/>, ...); this flag only makes it possible to look at them separately.
+    /// </summary>
+    public bool IsProjectileHit { get; init; }
+
     /// <summary><c>true</c>: <see cref="Weapon"/> comes from the cue itself (<c>SourceWeapon</c>, exact); <c>false</c>: guessed from the attacker's held weapon.</summary>
     public bool IsWeaponFromCue { get; init; }
 
