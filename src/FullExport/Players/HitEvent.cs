@@ -23,8 +23,33 @@ public sealed class HitEvent
     public PlayerStats? Attacker { get; init; }
     public PlayerStats? Victim { get; init; }
 
-    /// <summary>Damage of this hit.</summary>
+    /// <summary>
+    /// Damage of this hit as the replay reports it: the full damage of the weapon. For a hit that knocks or eliminates the victim
+    /// this is more than the victim had left (a 90 damage hit on a victim with 20 health still has 90 here), see <see cref="Overkill"/>.
+    /// </summary>
     public float Amount { get; init; }
+
+    /// <summary>
+    /// Part of <see cref="Amount"/> that went beyond the health and shield the victim had left, so it did not take anything away.
+    /// 0 for a hit the victim survived. Example: 90 damage on a victim with 20 health left is 70 overkill.
+    /// <para>
+    /// <c>null</c> if the replay does not contain the health of the victim. A server replay has the health of every player,
+    /// so the value is set for all hits. A normal (client) replay only has the health of the player who recorded it,
+    /// so the value is only set for hits ON that player and <c>null</c> for all hits on enemies.
+    /// Also <c>null</c> if <see cref="Export.ExportSettings.TrackHealth"/> is off.
+    /// </para>
+    /// <para>
+    /// The value is calculated, not read: health and shield of the victim shortly before the hit, minus the other hits the
+    /// victim took right before it. Healing in that moment or several hits in the same frame can shift it by a few points.
+    /// </para>
+    /// </summary>
+    public float? Overkill { get; internal set; }
+
+    /// <summary>
+    /// <see cref="Amount"/> without <see cref="Overkill"/>: the health and shield the hit really took away.
+    /// <c>null</c> if the overkill is unknown (see <see cref="Overkill"/>: only known in server replays, or for hits on the recording player).
+    /// </summary>
+    public float? AmountWithoutOverkill => Overkill is { } overkill ? Amount - overkill : null;
 
     public bool IsCritical { get; init; }
     /// <summary>

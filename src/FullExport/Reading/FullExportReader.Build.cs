@@ -44,6 +44,7 @@ public sealed partial class FullExportReader
         AssignBuilds();
         AssignEliminations(replay, players);
         MarkFatalCueHits();
+        AssignOverkill(players);
         AssignTeammates(replay.TeamData, players);
 
         FinishContext context = new(MatchStartTime, matchEnd, StormPhases, SupplyDrops);
@@ -347,6 +348,65 @@ public sealed partial class FullExportReader
             }
 
             hit.IsFatal = victim.RawDeaths.Any(e => Math.Abs(e.T - hit.T) < KnockCueDelaySeconds && e.CreditedTo == hit.Attacker);
+        }
+    }
+
+    /// <summary>
+    /// The health sample that counts as "before the hit" is at least this many seconds older than the hit. The cue of a fatal hit
+    /// arrives up to <see cref="KnockCueDelaySeconds"/> after the victim's health already changed, so a newer sample could
+    /// already show the state after the hit.
+    /// </summary>
+    private const float OverkillLookbackSeconds = 0.3f;
+
+    /// <summary>
+    /// Sets <see cref="HitEvent.Overkill"/> of every hit whose victim has health data (all players in a server replay, only the
+    /// recording player in a client replay). A hit the victim survived has no overkill. For a fatal hit the health and shield
+    /// the victim had left are taken from the last health sample before the hit, minus the other hits right before it that
+    /// are not part of that sample yet.
+    /// </summary>
+    private static void AssignOverkill(List<PlayerStats> players)
+    {
+        foreach (PlayerStats victim in players)
+        {
+            List<HealthSample> health = victim.HealthTimeline;
+            if (health.Count == 0 || victim.RawTaken.Count == 0)
+            {
+                continue;
+            }
+
+            List<HitEvent> hits = [.. victim.RawTaken.OrderBy(h => h.T)];
+            int sample = -1;
+
+            for (int i = 0; i < hits.Count; i++)
+            {
+                HitEvent hit = hits[i];
+                float before = hit.T - OverkillLookbackSeconds;
+
+                // Both lists are sorted by time, so the sample index only moves forward.
+                while (sample + 1 < health.Count && health[sample + 1].T < before)
+                {
+                    sample++;
+                }
+
+                if (sample < 0)
+                {
+                    continue;
+                }
+
+                if (!hit.IsFatal)
+                {
+                    hit.Overkill = 0;
+                    continue;
+                }
+
+                float left = Math.Max(0, health[sample].Health) + Math.Max(0, health[sample].Shield);
+                for (int j = i - 1; j >= 0 && hits[j].T >= before; j--)
+                {
+                    left -= hits[j].Amount;
+                }
+
+                hit.Overkill = Math.Clamp(hit.Amount - Math.Max(0, left), 0, hit.Amount);
+            }
         }
     }
 }

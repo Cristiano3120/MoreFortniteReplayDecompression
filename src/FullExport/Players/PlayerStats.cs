@@ -1,4 +1,4 @@
-using FortniteReplayReader.Models;
+﻿using FortniteReplayReader.Models;
 using FortniteReplayReader.Models.Events;
 using MoreFortniteReplayDecompression.Match;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
@@ -170,9 +170,34 @@ public sealed partial class PlayerStats
 
     // --- Damage dealt (BatchedDamageCues, attacker = this player)
     /// <summary>
-    /// includes dmg to knocked players
+    /// Damage dealt to players since the match start, as the replay reports it (this is also what Epic's end-of-match stats count).
+    /// <list type="bullet">
+    /// <item>Includes damage to knocked players (<see cref="DamageDealtToDowned"/>).</item>
+    /// <item>
+    /// Includes overkill damage: a hit that knocks or eliminates counts with the full damage of the weapon, even if the victim had
+    /// less health left (see <see cref="OverkillDamage"/> and <see cref="DamageDealtWithoutOverkill"/>).
+    /// </item>
+    /// </list>
     /// </summary>
     public float DamageDealt { get; internal set; }
+
+    /// <summary>
+    /// Part of <see cref="DamageDealt"/> that went beyond the health and shield the victims had left (sum of <see cref="HitEvent.Overkill"/>).
+    /// <para>
+    /// Only available in server replays. The overkill of a hit needs the health of the victim, and a normal (client) replay only
+    /// contains the health of the player who recorded it. The value is <c>null</c> as soon as one hit of this player has an unknown
+    /// overkill, which in a client replay is every player who hit an enemy. Also <c>null</c> if
+    /// <see cref="Export.ExportSettings.TrackHealth"/> is off.
+    /// </para>
+    /// <para>The value is calculated from the health timeline of the victims and can be off by a few points per fatal hit.</para>
+    /// </summary>
+    public float? OverkillDamage { get; internal set; }
+
+    /// <summary>
+    /// <see cref="DamageDealt"/> without <see cref="OverkillDamage"/>: the health and shield this player really took away.
+    /// <c>null</c> if the overkill is unknown (only available in server replays, see <see cref="OverkillDamage"/>).
+    /// </summary>
+    public float? DamageDealtWithoutOverkill => OverkillDamage is { } overkill ? DamageDealt - overkill : null;
     public float DamageDealtWithoutKnocked => DamageDealt - DamageDealtToDowned;
     public int Hits { get; internal set; }
     public int CriticalHits { get; internal set; }

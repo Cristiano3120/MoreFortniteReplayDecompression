@@ -1,4 +1,4 @@
-using MoreFortniteReplayDecompression.Match;
+﻿using MoreFortniteReplayDecompression.Match;
 using Unreal.Core.Models;
 
 namespace MoreFortniteReplayDecompression.Players;
@@ -55,6 +55,9 @@ public sealed partial class PlayerStats
         DamageTaken = 0; HitsTaken = 0; PreMatchDamageTaken = 0;
         DamageDealtToStructures = 0; StructureHits = 0;
 
+        // Unknown as soon as one hit has no overkill value (the replay has no health data of that victim).
+        float? overkill = 0;
+
         foreach (HitEvent hit in RawDealt)
         {
             if (hit.T < start)
@@ -68,6 +71,7 @@ public sealed partial class PlayerStats
             DamageDealtEvents.Add(hit);
             DamageDealt += hit.Amount;
             Hits++;
+            overkill += hit.Overkill;
 
             if (hit.IsCritical)
             {
@@ -111,6 +115,8 @@ public sealed partial class PlayerStats
                 DamageDealtToSelf += hit.Amount;
             }
         }
+
+        OverkillDamage = overkill;
 
         foreach (HitEvent hit in RawTaken)
         {
