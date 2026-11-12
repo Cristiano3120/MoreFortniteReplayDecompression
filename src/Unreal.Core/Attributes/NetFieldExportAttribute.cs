@@ -12,7 +12,7 @@ public abstract class NetFieldAttribute : Attribute
 /// Attribute to map a property to the name used in the property replication.
 /// <see cref="RepLayoutCmdType"/> is used to specify the parsing method.
 /// </summary>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = true)]
 public sealed class NetFieldExportAttribute : NetFieldAttribute
 {
     public string Name { get; set; }

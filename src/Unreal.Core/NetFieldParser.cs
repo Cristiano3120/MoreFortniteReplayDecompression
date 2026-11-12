@@ -227,15 +227,19 @@ public class NetFieldParser
     {
         foreach (var property in type.GetProperties())
         {
-            var netFieldExportAttribute = property.GetCustomAttribute<NetFieldExportAttribute>();
+            // A property can be exported under several names (the same data has a different name in different groups or versions).
+            var allExportAttributes = property.GetCustomAttributes<NetFieldExportAttribute>().ToList();
+            var netFieldExportAttributes = allExportAttributes
+                .Where(a => a.MinimalParseMode == null || a.MinimalParseMode <= mode)
+                .ToList();
             var handleAttribute = property.GetCustomAttribute<NetFieldExportHandleAttribute>();
 
-            if (netFieldExportAttribute == null && handleAttribute == null)
+            if (allExportAttributes.Count == 0 && handleAttribute == null)
             {
                 continue;
             }
 
-            if (netFieldExportAttribute != null && netFieldExportAttribute.MinimalParseMode != null && netFieldExportAttribute.MinimalParseMode > mode)
+            if (allExportAttributes.Count > 0 && netFieldExportAttributes.Count == 0)
             {
                 continue;
             }
@@ -256,32 +260,39 @@ public class NetFieldParser
                 }
             }
 
-            var netFieldInfo = new NetFieldInfo
+            NetFieldInfo CreateInfo(NetFieldAttribute attribute)
             {
-                MovementAttribute = property.GetCustomAttribute<RepMovementAttribute>(),
-                PropertyInfo = property,
-                ElementTypeId = elementTypeId
-            };
+                var netFieldInfo = new NetFieldInfo
+                {
+                    MovementAttribute = property.GetCustomAttribute<RepMovementAttribute>(),
+                    PropertyInfo = property,
+                    ElementTypeId = elementTypeId,
+                    Attribute = attribute,
+                };
 
-            if (property.PropertyType.IsEnum)
-            {
-                netFieldInfo.DefaultValue = Enum.GetValues(property.PropertyType).Cast<int>().Max();
-            }
-            else if (property.PropertyType.IsValueType)
-            {
-                netFieldInfo.DefaultValue = Activator.CreateInstance(property.PropertyType);
+                if (property.PropertyType.IsEnum)
+                {
+                    netFieldInfo.DefaultValue = Enum.GetValues(property.PropertyType).Cast<int>().Max();
+                }
+                else if (property.PropertyType.IsValueType)
+                {
+                    netFieldInfo.DefaultValue = Activator.CreateInstance(property.PropertyType);
+                }
+
+                return netFieldInfo;
             }
 
-            if (netFieldExportAttribute != null)
+            if (netFieldExportAttributes.Count > 0)
             {
-                netFieldInfo.Attribute = netFieldExportAttribute;
-                info.Properties.Add(netFieldExportAttribute.Name, netFieldInfo);
+                foreach (var netFieldExportAttribute in netFieldExportAttributes)
+                {
+                    info.Properties.Add(netFieldExportAttribute.Name, CreateInfo(netFieldExportAttribute));
+                }
             }
             else
             {
                 info.UsesHandles = true;
-                netFieldInfo.Attribute = handleAttribute;
-                info.Handles.Add(handleAttribute.Handle, netFieldInfo);
+                info.Handles.Add(handleAttribute.Handle, CreateInfo(handleAttribute));
             }
         }
     }

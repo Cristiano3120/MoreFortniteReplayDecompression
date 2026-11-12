@@ -25,9 +25,11 @@ public class FPredictionKey : IProperty
     /// <param name="reader"></param>
     public void Serialize(NetBitReader reader)
     {
+        // Since PredictionKeyBaseNotReplicated the base key (and its flag) is not written any more.
+        var baseNotReplicated = reader.EngineNetworkVersion >= Enums.EngineNetworkVersionHistory.PredictionKeyBaseNotReplicated;
         var hasBaseKey = false;
         var validKeyForConnection = reader.ReadBit();
-        if (validKeyForConnection)
+        if (validKeyForConnection && !baseNotReplicated)
         {
             hasBaseKey = reader.ReadBit();
         }

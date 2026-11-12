@@ -21,6 +21,12 @@ public class FGameplayTag : IProperty, IResolvable
     public uint TagIndex { get; set; }
 
     /// <summary>
+    /// The tag was replicated dynamically (as net token). <see cref="TagIndex"/> then is an index into the
+    /// dynamic tag dictionary (<see cref="NetGuidCache.NetworkGameplayTagDynamicIndex"/>), not the fast replication one.
+    /// </summary>
+    public bool IsDynamic { get; set; }
+
+    /// <summary>
     /// see https://github.com/EpicGames/UnrealEngine/blob/6c20d9831a968ad3cb156442bebb41a883e62152/Engine/Source/Runtime/GameplayTags/Private/GameplayTagContainer.cpp#L1210
     /// </summary>
     /// <param name="reader"></param>
@@ -46,6 +52,8 @@ public class FGameplayTag : IProperty, IResolvable
         }
         else if (bUseDynamicReplication)
         {
+            IsDynamic = true;
+
             // https://github.com/EpicGames/UnrealEngine/blob/55e6c59d10463ba45392a915f89cdf31660a41c7/Engine/Source/Runtime/GameplayTags/Private/GameplayTagContainer.cpp#L1393
             // https://github.com/EpicGames/UnrealEngine/blob/85fe5dd282a00eb15e7ba41cbe46a46c440dea79/Engine/Source/Runtime/Experimental/Iris/Core/Private/Iris/ReplicationSystem/NetTokenStore.cpp#L117
             TagIndex = reader.ReadIntPacked();
@@ -74,7 +82,7 @@ public class FGameplayTag : IProperty, IResolvable
 
     public void Resolve(NetGuidCache cache)
     {
-        if (cache.TryGetTagName(TagIndex, out var name))
+        if (cache.TryGetTagName(TagIndex, out var name, IsDynamic))
         {
             TagName = name;
         }

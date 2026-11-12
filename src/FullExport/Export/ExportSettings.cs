@@ -1,4 +1,4 @@
-using FortniteReplayReader.Models.NetFieldExports;
+﻿using FortniteReplayReader.Models.NetFieldExports;
 using FortniteReplayReader.Models.NetFieldExports.Builds;
 using FortniteReplayReader.Models.NetFieldExports.RPC;
 using MoreFortniteReplayDecompression.Players;
@@ -41,6 +41,12 @@ public sealed class ExportSettings
     /// <summary>Pieces the players built (<see cref="PlayerStats.Builds"/>, <see cref="PlayerStats.MaterialsUsed"/>). Off: build actors are not parsed.</summary>
     public bool TrackBuilds { get; init; } = true;
 
+    /// <summary>
+    /// Gameplay cues of the pawns (<see cref="GameplayCueAdded"/>, <see cref="GameplayCueExecuted"/>): effects such as healing, sliding or
+    /// charging a weapon, with tag name, instigator and causer. They only end up in the timeline, so they are not parsed without <see cref="CollectTimeline"/>.
+    /// </summary>
+    public bool TrackGameplayCues { get; init; } = true;
+
     /// <summary>Further export group types of the library that should not be parsed, for example <c>typeof(SupplyDropLlama)</c>.</summary>
     public IReadOnlySet<Type> IgnoredExportGroups { get; init; } = new HashSet<Type>();
 
@@ -57,6 +63,12 @@ public sealed class ExportSettings
         if (!TrackBuilds)
         {
             ignored.Add(typeof(PlayerBuild));
+        }
+
+        if (!TrackGameplayCues || !CollectTimeline)
+        {
+            ignored.Add(typeof(GameplayCueAdded));
+            ignored.Add(typeof(GameplayCueExecuted));
         }
 
         if (!TrackHits)

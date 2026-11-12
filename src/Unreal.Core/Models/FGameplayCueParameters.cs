@@ -38,8 +38,7 @@ public class FGameplayCueParameters : IProperty
     /// <summary>
     /// Effect context, contains information about hit result, etc
     /// </summary>
-    //public FGameplayEffectContextHandle EffectContext { get; private set; }
-    public object EffectContext { get; private set; }
+    public FGameplayEffectContextHandle? EffectContext { get; private set; }
 
     /// <summary>
     /// The tag name that matched this specific gameplay cue handler
@@ -131,11 +130,15 @@ public class FGameplayCueParameters : IProperty
         }
         if ((RepBits & (1 << (int)RepFlag.REP_EffectContext)) > 0)
         {
-            // FGameplayEffectContextHandle
-            if (reader.ReadBit())
+            EffectContext = new FGameplayEffectContextHandle();
+            EffectContext.Serialize(reader);
+
+            // Games subclass the context and append their own data (Fortnite: 71 more bits) whose layout is unknown.
+            // If the context is the last field, the rest of the property belongs to it and is skipped.
+            if (RepBits >> ((int)RepFlag.REP_EffectContext + 1) == 0)
             {
-                var handle = new FGameplayEffectContextHandle();
-                handle.Serialize(reader);
+                reader.SkipBits(reader.GetBitsLeft());
+                return;
             }
         }
         if ((RepBits & (1 << (int)RepFlag.REP_Location)) > 0)

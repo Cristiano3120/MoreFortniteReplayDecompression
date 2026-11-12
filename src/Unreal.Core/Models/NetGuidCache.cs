@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using Unreal.Core.Contracts;
 using Unreal.Core.Extensions;
 
@@ -32,7 +32,7 @@ public class NetGuidCache
     public Dictionary<uint, NetFieldExportGroup> NetFieldExportGroupMapPathFixed { get; private set; } = new Dictionary<uint, NetFieldExportGroup>();
 
     /// <summary>
-    /// Holds data about the tag dictionary
+    /// Holds data about the tag dictionary of fast replicated tags (falls back to the dynamic tag dictionary if there is none).
     /// </summary>
     public NetFieldExportGroup? NetworkGameplayTagNodeIndex
     {
@@ -56,6 +56,21 @@ public class NetGuidCache
     }
 
     /// <summary>
+    /// Holds data about the tag dictionary of dynamically replicated tags (net tokens).
+    /// </summary>
+    public NetFieldExportGroup? NetworkGameplayTagDynamicIndex
+    {
+        get
+        {
+            if (_networkGameplayTagDynamicIndex == null && NetFieldExportGroupMap.TryGetValue("NetworkGameplayTagDynamicIndex", out var dynamicIndex))
+            {
+                _networkGameplayTagDynamicIndex = dynamicIndex;
+            }
+            return _networkGameplayTagDynamicIndex;
+        }
+    }
+
+    /// <summary>
     /// Maps a netguid to received <see cref="IExternalData"/>.
     /// </summary>
     public Dictionary<uint, IExternalData> ExternalData { get; private set; } = new();
@@ -68,6 +83,7 @@ public class NetGuidCache
     // Export groups are often exported after the first bunch of an object, so a failed path is retried once new groups are known.
     private readonly Dictionary<string, int> _failedPaths = new();
     private NetFieldExportGroup? _networkGameplayTagNodeIndex { get; set; }
+    private NetFieldExportGroup? _networkGameplayTagDynamicIndex { get; set; }
 
     /// <summary>
     /// Clears export group mappings.
@@ -241,20 +257,20 @@ public class NetGuidCache
 
     /// <summary>
     /// Tries to resolve the tagIndex using the <see cref="NetworkGameplayTagNodeIndex"/>
+    /// (or the <see cref="NetworkGameplayTagDynamicIndex"/> for dynamically replicated tags).
     /// </summary>
     /// <param name="tagIndex"></param>
     /// <param name="tagName"></param>
+    /// <param name="dynamic">The tag was replicated dynamically: its index belongs to the dynamic tag dictionary.</param>
     /// <returns>true if tag was resolved, false otherwise</returns>
-    public bool TryGetTagName(uint tagIndex, [NotNullWhen(returnValue: true)] out string tagName)
+    public bool TryGetTagName(uint tagIndex, [NotNullWhen(returnValue: true)] out string tagName, bool dynamic = false)
     {
         tagName = "";
-        if (NetworkGameplayTagNodeIndex != null && NetworkGameplayTagNodeIndex.IsValidIndex(tagIndex))
+        var tags = dynamic ? NetworkGameplayTagDynamicIndex : NetworkGameplayTagNodeIndex;
+        if (tags != null && tags.IsValidIndex(tagIndex) && tags.NetFieldExports[tagIndex] != null)
         {
-            if (NetworkGameplayTagNodeIndex.NetFieldExports[tagIndex] != null)
-            {
-                tagName = NetworkGameplayTagNodeIndex.NetFieldExports[tagIndex].Name;
-                return true;
-            }
+            tagName = tags.NetFieldExports[tagIndex].Name;
+            return true;
         }
         return false;
     }
@@ -288,6 +304,7 @@ public class NetGuidCache
         NetFieldExportGroupMapPathFixed.Clear();
         ExternalData.Clear();
         _networkGameplayTagNodeIndex = null;
+        _networkGameplayTagDynamicIndex = null;
         _archTypeToExportGroup.Clear();
         _cleanedPaths.Clear();
         _cleanedClassNetCache.Clear();

@@ -47,16 +47,29 @@ public class FGameplayEffectContextHandle : IProperty
     public bool bHasWorldOrigin { get; private set; }
 
     /// <summary>
+    /// The handle holds a context (<c>false</c>: nothing else was serialized).
+    /// </summary>
+    public bool IsValid { get; private set; }
+
+    /// <summary>
+    /// NetGUID of the script struct of the context (<c>FGameplayEffectContext</c> or a game specific subclass such as <c>FFortGameplayEffectContext</c>).
+    /// </summary>
+    public uint ScriptStruct { get; private set; }
+
+    /// <summary>
     /// see https://github.com/EpicGames/UnrealEngine/blob/6c20d9831a968ad3cb156442bebb41a883e62152/Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities/Private/GameplayEffectTypes.cpp#L311
     /// see https://github.com/EpicGames/UnrealEngine/blob/6c20d9831a968ad3cb156442bebb41a883e62152/Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities/Private/GameplayEffectTypes.cpp#L177
     /// </summary>
     /// <param name="reader"></param>
     public void Serialize(NetBitReader reader)
     {
-        var validData = reader.ReadBit();
+        IsValid = reader.ReadBit();
 
-        if (validData)
+        if (IsValid)
         {
+            // The handle writes the struct type of its data first (UPackageMap::SerializeObject), then the data itself.
+            ScriptStruct = reader.ReadIntPacked();
+
             var RepBits = reader.ReadBitsToInt(7);
 
             if ((RepBits & (1 << 0)) > 0)
