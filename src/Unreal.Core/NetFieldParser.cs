@@ -286,7 +286,7 @@ public class NetFieldParser
             {
                 foreach (var netFieldExportAttribute in netFieldExportAttributes)
                 {
-                    info.Properties.Add(netFieldExportAttribute.Name, CreateInfo(netFieldExportAttribute));
+                    info.Properties.Add(PropertyKey(netFieldExportAttribute.Name, netFieldExportAttribute.Occurrence), CreateInfo(netFieldExportAttribute));
                 }
             }
             else
@@ -386,7 +386,9 @@ public class NetFieldParser
             var propertyIndex = export.PropertyId;
             if (export.PropertyId == -1)
             {
-                if (!netGroupInfo.Properties.TryGetIndex(export.Name, out propertyIndex))
+                // A property bound to the n-th export of this name wins over one that takes all of them.
+                if (!netGroupInfo.Properties.TryGetIndex(PropertyKey(export.Name, Occurrence(exportGroup, export, handle)), out propertyIndex) &&
+                    !netGroupInfo.Properties.TryGetIndex(export.Name, out propertyIndex))
                 {
                     export.PropertyId = -2;
                     return false;
@@ -400,6 +402,24 @@ public class NetFieldParser
 
         SetType(obj, netFieldInfo, netGroupInfo, exportGroup, netBitReader, singleInstance);
         return true;
+    }
+
+    /// <summary>Key of a property in <see cref="NetFieldGroupInfo.Properties"/>, see <see cref="NetFieldExportAttribute.Occurrence"/>.</summary>
+    private static string PropertyKey(string name, int occurrence) => occurrence < 0 ? name : $"{name}#{occurrence}";
+
+    /// <summary>How many exports with the same name as <paramref name="export"/> the group has below <paramref name="handle"/>.</summary>
+    private static int Occurrence(NetFieldExportGroup group, NetFieldExport export, uint handle)
+    {
+        var occurrence = 0;
+        for (var i = 0; i < handle && i < group.NetFieldExports.Length; i++)
+        {
+            if (group.NetFieldExports[i]?.Name == export.Name)
+            {
+                occurrence++;
+            }
+        }
+
+        return occurrence;
     }
 
     private void SetType(INetFieldExportGroup obj, NetFieldInfo netFieldInfo, NetFieldGroupInfo groupInfo, NetFieldExportGroup exportGroup, NetBitReader netBitReader, bool singleInstance)

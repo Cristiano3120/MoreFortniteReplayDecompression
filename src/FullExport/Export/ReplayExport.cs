@@ -1,4 +1,4 @@
-using FortniteReplayReader.Models;
+﻿using FortniteReplayReader.Models;
 using MoreFortniteReplayDecompression.Match;
 using MoreFortniteReplayDecompression.Players;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
@@ -12,6 +12,9 @@ public sealed class ReplayExport
 {
     /// <summary>The library's standard result (PlayerData, GameData, MapData, Eliminations, KillFeed, TeamData, ...).</summary>
     public required FortniteReplay Replay { get; init; }
+
+    /// <summary>Time, length, tournament, playlist and other small facts about the replay.</summary>
+    public required ReplayMetadata Metadata { get; init; }
 
     /// <summary>All entries in replay order (ascending time). Empty if the timeline was not collected.</summary>
     public required List<TimelineEvent> Timeline { get; init; }

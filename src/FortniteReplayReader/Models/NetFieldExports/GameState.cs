@@ -315,6 +315,17 @@ public class GameState : INetFieldExportGroup
     [NetFieldExport("DefaultRedeployGliderHeightLimit", RepLayoutCmdType.PropertyFloat)]
     public float? DefaultRedeployGliderHeightLimit { get; set; }
 
+    /// <summary>
+    /// Mnemonic (code name) of the island link of the match. In tournaments this is the internal name of the tournament,
+    /// for example <c>tournament_epicgames_s43_onepiecezorocup_eu</c>. The game state has three fields with this name;
+    /// this is the first one (the other two are a copy of it and <c>universe_...</c>).
+    /// </summary>
+    [NetFieldExport("Mnemonic", RepLayoutCmdType.PropertyString, Occurrence = 0)]
+    public string? Mnemonic { get; set; }
+
+    [NetFieldExport("bIsTournamentMatch", RepLayoutCmdType.PropertyBool)]
+    public bool? bIsTournamentMatch { get; set; }
+
     [NetFieldExport("EventTournamentRound", RepLayoutCmdType.Enum)]
     public int? EventTournamentRound { get; set; }
 

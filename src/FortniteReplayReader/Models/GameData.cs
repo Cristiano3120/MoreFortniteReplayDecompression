@@ -21,6 +21,14 @@ public class GameData
     public int? TeamSize { get; set; }
     public int? TotalPlayerStructures { get; set; }
 
+    /// <summary>The match is a tournament match (game state <c>bIsTournamentMatch</c>).</summary>
+    public bool? IsTournamentMatch { get; set; }
+
+    /// <summary>
+    /// Mnemonic (code name) of the island link of the match, for example <c>tournament_epicgames_s43_onepiecezorocup_eu</c> in a tournament.
+    /// </summary>
+    public string? Mnemonic { get; set; }
+
     public bool IsTournamentRound => TournamentRound > 0;
     public int? TournamentRound { get; set; }
     public bool? IsLargeTeamGame { get; set; }

@@ -111,6 +111,8 @@ public class FortniteReplayBuilder
 
         GameData.IsLargeTeamGame ??= state.bIsLargeTeamGame;
         GameData.TournamentRound ??= state.EventTournamentRound;
+        GameData.IsTournamentMatch ??= state.bIsTournamentMatch;
+        GameData.Mnemonic ??= state.Mnemonic;
 
         GameData.AdditionalPlaylistLevels ??= state.AdditionalPlaylistLevelsStreamed?.Select(i => i.Name);
 

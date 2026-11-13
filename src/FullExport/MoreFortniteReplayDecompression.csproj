@@ -5,6 +5,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<AssemblyName>MoreFortniteReplayDecompression</AssemblyName>
 		<RootNamespace>MoreFortniteReplayDecompression</RootNamespace>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<!-- NuGet package -->

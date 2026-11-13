@@ -1,4 +1,4 @@
-# MoreFortniteReplayDecompression
+﻿# MoreFortniteReplayDecompression
 
 C# parser for your Fortnite replays, with **detailed stats for every player**.
 
@@ -119,6 +119,21 @@ ReplayExport export = ReplayExporter.Read("your-amazing-fortnite.replay", settin
 ```
 
 `ExportSettings.StatsOnly` keeps all stats but skips the timeline. `ExportSettings.Full` reads everything.
+
+### Only the metadata
+
+When, how long, which playlist and whether it was a tournament. Only the start of the replay is read, so this takes a few
+milliseconds instead of seconds (about 2 to 10 ms per replay when several replays are read, even for a 130 MB server replay; the very first read of a program takes longer).
+
+```csharp
+ReplayMetadata metadata = ReplayExporter.ReadMetadata("your-amazing-fortnite.replay");
+
+Console.WriteLine($"Match started: {metadata.MatchStartedUtc} UTC, length {metadata.Length}");
+Console.WriteLine($"Tournament:    {metadata.TournamentCodeName}"); // e.g. tournament_epicgames_s43_onepiecezorocup_eu
+Console.WriteLine($"Playlist:      {metadata.Playlist}");
+```
+
+The same values are in `export.Metadata` after a normal read. `ExportSettings.Metadata` does the same through `ReplayExporter.Read`.
 
 ## What the replay does not contain
 

@@ -14,11 +14,30 @@ public sealed class ExportSettings
     /// <summary>Everything on, including the full typed timeline.</summary>
     public static ExportSettings Full => new();
 
+    /// <summary>
+    /// Only the metadata of the replay (<see cref="ReplayExport.Metadata"/>: time, length, tournament, playlist, ...), as fast as possible.
+    /// No players, hits or timeline; see <see cref="MetadataOnly"/>.
+    /// </summary>
+    public static ExportSettings Metadata => new()
+    {
+        MetadataOnly = true,
+        CollectTimeline = false,
+    };
+
     /// <summary>All player statistics, but no timeline (much leaner).</summary>
     public static ExportSettings StatsOnly => new()
     {
         CollectTimeline = false
     };
+
+    /// <summary>
+    /// <c>true</c>: only read the metadata of the replay (<see cref="ReplayExport.Metadata"/>) and nothing else. Only the start of the
+    /// replay is read and the reading stops as soon as the values are known (usually after the first one to four data chunks),
+    /// so this takes a few milliseconds instead of seconds. <see cref="ReplayExport.Players"/>, <see cref="ReplayExport.Bots"/>,
+    /// <see cref="ReplayExport.Timeline"/> and the other match data stay empty, and all other settings are ignored.
+    /// Shortcut: <see cref="ReplayExporter.ReadMetadata(string)"/>.
+    /// </summary>
+    public bool MetadataOnly { get; init; }
 
     /// <summary><c>true</c>: store every read export group as typed time series (<see cref="ReplayExport.Timeline"/>). Costs time and memory.</summary>
     public bool CollectTimeline { get; init; } = true;

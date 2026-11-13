@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using FortniteReplayReader.Exceptions;
 using FortniteReplayReader.Extensions;
@@ -34,6 +34,17 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
     {
         var bytes = File.ReadAllBytes(fileName);
         using var archive = new Unreal.Core.BinaryReader(bytes);
+
+        Builder = new FortniteReplayBuilder();
+        ReadReplay(archive);
+
+        return Builder.Build(Replay);
+    }
+
+    /// <summary>Reads a replay that is already in memory, without copying it.</summary>
+    public FortniteReplay ReadReplay(ReadOnlyMemory<byte> data)
+    {
+        using var archive = new Unreal.Core.BinaryReader(data);
 
         Builder = new FortniteReplayBuilder();
         ReadReplay(archive);

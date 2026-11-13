@@ -1,4 +1,4 @@
-using FortniteReplayReader.Models;
+﻿using FortniteReplayReader.Models;
 using MoreFortniteReplayDecompression.Players;
 using MoreFortniteReplayDecompression.Reading;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
@@ -27,6 +27,21 @@ public static class ReplayExporter
     /// <param name="settings">What should be read. Everything that is switched off is not parsed (faster).</param>
     public static ReplayExport Read(string path, ExportSettings settings)
     {
+        if (settings.MetadataOnly)
+        {
+            FortniteReplay metadataReplay = MetadataReader.Read(path);
+            return new ReplayExport
+            {
+                Replay = metadataReplay,
+                Metadata = ReplayMetadata.From(metadataReplay),
+                Timeline = [],
+                GuidToChannel = [],
+                GuidToArchetype = [],
+                Players = [],
+                Bots = [],
+            };
+        }
+
         FullExportReader reader = new(settings);
         FortniteReplay replay = reader.ReadReplay(path);
         List<PlayerStats> players = reader.BuildPlayers(replay);
@@ -34,6 +49,7 @@ public static class ReplayExporter
         return new ReplayExport
         {
             Replay = replay,
+            Metadata = ReplayMetadata.From(replay),
             Timeline = reader.Events,
             GuidToChannel = new Dictionary<ChannelGuid, ChannelIndex>(reader.GuidToChannel),
             GuidToArchetype = new Dictionary<ChannelGuid, string?>(reader.GuidToArchetype),
@@ -44,4 +60,11 @@ public static class ReplayExporter
             SupplyDrops = reader.SupplyDrops,
         };
     }
+
+    /// <summary>
+    /// Reads only the metadata of a replay (time, length, tournament, playlist, ...). Only the start of the replay is read,
+    /// so this is much faster than a full read. Same as <see cref="Read(string, ExportSettings)"/> with <see cref="ExportSettings.Metadata"/>.
+    /// </summary>
+    /// <param name="path">Path to the .replay file.</param>
+    public static ReplayMetadata ReadMetadata(string path) => ReplayMetadata.From(MetadataReader.Read(path));
 }
