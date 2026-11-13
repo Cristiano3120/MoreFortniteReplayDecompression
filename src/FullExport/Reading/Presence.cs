@@ -1,3 +1,4 @@
+﻿using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 using Unreal.Core.Contracts;
@@ -7,11 +8,11 @@ namespace MoreFortniteReplayDecompression.Reading;
 /// <summary>
 /// Tells whether an export group carries data: at least one property that is not <c>null</c> (reference and nullable types)
 /// or not <c>default</c> (other value types). The parser resets a reused instance, so this means "was sent in this update".
-/// Checks are compiled once per type.
+/// Checks are compiled once per type. The cache is shared by all readers, also when replays are read in parallel.
 /// </summary>
 internal static class Presence
 {
-    private static readonly Dictionary<(Type, bool), Func<object, bool>> Cache = new();
+    private static readonly ConcurrentDictionary<(Type, bool), Func<object, bool>> Cache = new();
     private static readonly MethodInfo ObjectEquals = typeof(object).GetMethod(nameof(Equals), [typeof(object)])!;
 
     public static bool Any(INetFieldExportGroup group, HashSet<string>? exclude)
@@ -19,8 +20,8 @@ internal static class Presence
         (Type, bool) key = (group.GetType(), exclude is not null);
         if (!Cache.TryGetValue(key, out Func<object, bool>? check))
         {
-            check = Build(key.Item1, exclude);
-            Cache[key] = check;
+            // Two threads may build the same check at the same time; both are equal, so it does not matter which one is kept.
+            check = Cache.GetOrAdd(key, Build(key.Item1, exclude));
         }
 
         return check(group);

@@ -135,6 +135,64 @@ Console.WriteLine($"Playlist:      {metadata.Playlist}");
 
 The same values are in `export.Metadata` after a normal read. `ExportSettings.Metadata` does the same through `ReplayExporter.Read`.
 
+### Many replays at once
+
+`ReplayExporter.ReadMany` reads several replays at the same time. The results come back in the order of the paths, and a replay
+that cannot be read is returned with its error instead of stopping the others.
+
+```csharp
+List<ReplayReadResult> results = ReplayExporter.ReadMany(
+    Directory.EnumerateFiles("replays", "*.replay"),
+    ExportSettings.StatsOnly,
+    new ParallelReadOptions { MaxParallelReplays = 8 });
+
+foreach (ReplayReadResult result in results)
+{
+    Console.WriteLine(result.Success
+        ? $"{result.Path}: {result.Export!.Players.Count} players in {result.Duration.TotalSeconds:F1} s"
+        : $"{result.Path}: {result.Error!.Message}");
+}
+```
+
+By default all read replays stay in memory until `ReadMany` returns (40 replays: 7.7 GB). For many or large replays, take what you
+need from each replay as soon as it is read and let it go:
+
+- `OnReplayRead` is your own function. `ReadMany` calls it once for every replay, right after that replay is read, also for
+  replays that failed. It is called from several threads at once, so use `lock` when you add up values.
+- `KeepResults = false` drops every replay after `OnReplayRead`, so only the replays that are currently being read are in memory
+  (40 replays: 3.3 GB). The returned list then only has the path, the error and the duration of each replay.
+
+```csharp
+double damage = 0;
+object sync = new();
+
+ReplayExporter.ReadMany(paths, options: new ParallelReadOptions
+{
+    KeepResults = false,
+    OnReplayRead = result =>
+    {
+        PlayerStats? player = result.Export?.Player("Detect Bergii yh");
+        lock (sync) damage += player?.DamageDealt ?? 0;
+    },
+});
+```
+
+| Option | Default | |
+|---|---|---|
+| `MaxParallelReplays` | number of cores | how many replays are read at the same time (lower it if the memory runs out) |
+| `LargestFirst` | `true` | start with the largest files, so no large file runs alone at the end |
+| `OnReplayRead` | none | your function, called for every replay as soon as it is read |
+| `KeepResults` | `true` | `false`: drop every replay after `OnReplayRead` |
+| `ContinueOnError` | `true` | `false`: the first error stops the reading and is thrown |
+| `CancellationToken` | none | stop starting new replays (replays already being read are finished) |
+
+Switch on the server garbage collector in your program's .csproj, it makes parallel reading about twice as fast
+(40 replays on 16 cores: 12 s instead of 22 s; one after another they take 61 s):
+
+```xml
+<ServerGarbageCollection>true</ServerGarbageCollection>
+```
+
 ## What the replay does not contain
 
 Some things are simply not in the replay file, so this fork can't give them to you:
