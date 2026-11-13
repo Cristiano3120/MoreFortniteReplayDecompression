@@ -12,7 +12,7 @@
 	<PropertyGroup>
 		<IsPackable>true</IsPackable>
 		<PackageId>MoreFortniteReplayDecompression</PackageId>
-		<Version>1.3.0</Version>
+		<Version>1.4.0</Version>
 		<Authors>Cristiano3120</Authors>
 		<Copyright>Copyright © 2026 Cristiano3120, based on FortniteReplayDecompressor by Shiqan</Copyright>
 		<Description>Fortnite replay parser with detailed stats for every player: damage, hits, eliminations, assists, health, builds, materials, movement, storm and more.</Description>
