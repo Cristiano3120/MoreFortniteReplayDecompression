@@ -202,14 +202,5 @@ Some things are simply not in the replay file, so this fork can't give them to y
 - **Players far away (client replays only):** a replay recorded by a player only has data about players that were close to them,
   so the stats of that player and their team are the most complete. Server replays contain every player.
 
-
-## Original project
-
-The replay parsing itself is the work of the original project. See its
-[documentation](https://fortnitereplaydecompressor.readthedocs.io/en/latest/) and [Discord server](https://discord.gg/p5CMqJC).
-
-Special thanks from the original project to [Kuinox](https://github.com/Kuinox/ChartsNite), [ApertureC](https://github.com/ApertureC/),
-[AlpaGit](https://github.com/AlpaGit) and [SL-x-TnT](https://github.com/SL-x-TnT).
-
 ## License
 Licensed under the [MIT License](LICENSE).
