@@ -202,5 +202,8 @@ Some things are simply not in the replay file, so this fork can't give them to y
 - **Players far away (client replays only):** a replay recorded by a player only has data about players that were close to them,
   so the stats of that player and their team are the most complete. Server replays contain every player.
 
+## Thanks
+Thanks to [Shiqan](https://github.com/Shiqan) for developing the original project that does the parsing and for keeping it updated -> [Shiqan/FortniteReplayDecompressor](https://github.com/...](https://github.com/Shiqan/FortniteReplayDecompressor))
+
 ## License
 Licensed under the [MIT License](LICENSE).
