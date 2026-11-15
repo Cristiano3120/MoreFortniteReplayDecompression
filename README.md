@@ -202,15 +202,6 @@ Some things are simply not in the replay file, so this fork can't give them to y
 - **Players far away (client replays only):** a replay recorded by a player only has data about players that were close to them,
   so the stats of that player and their team are the most complete. Server replays contain every player.
 
-## Changes to the library
-
-Bug fixes and additions to the original library (also sent as pull requests to the original repository):
-
-- Health and shield are read correctly
-- Export groups that are sent late are not lost any more
-- The player who recorded the replay is always found
-- Export groups can be skipped to read faster
-- One class can read all export groups with the same path prefix (used for all build pieces)
 
 ## Original project
 
