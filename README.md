@@ -1,4 +1,5 @@
-﻿# MoreFortniteReplayDecompression
+[![chat](https://img.shields.io/badge/chat-on%20discord-7289DA?logo=discord&logoColor=white)](https://discord.gg/TTZV6a8F3F)
+ # MoreFortniteReplayDecompression
 
 C# parser for your Fortnite replays, with **detailed stats for every player**.
 
