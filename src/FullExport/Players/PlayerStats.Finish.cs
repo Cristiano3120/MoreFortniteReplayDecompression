@@ -18,9 +18,41 @@ public sealed partial class PlayerStats
         FinishMovement(start, context);
 
         FinishBuilds(start);
+        FinishShots(start);
 
         EquippedWeapons.Clear();
         EquippedWeapons.AddRange(RawWeaponChanges);
+    }
+
+    private void FinishShots(float start)
+    {
+        WeaponShots.Clear();
+
+        Dictionary<string, int> shots = [];
+        foreach ((float t, string weapon) in RawShots)
+        {
+            if (t >= start)
+            {
+                shots[weapon] = shots.GetValueOrDefault(weapon) + 1;
+            }
+        }
+
+        Dictionary<string, int> hits = [];
+        foreach (HitEvent hit in DamageDealtEvents)
+        {
+            if (!hit.IsSelfDamage && hit.Weapon is { } weapon && shots.ContainsKey(weapon))
+            {
+                hits[weapon] = hits.GetValueOrDefault(weapon) + 1;
+            }
+        }
+
+        foreach ((string weapon, int count) in shots.OrderByDescending(s => s.Value).ThenBy(s => s.Key, StringComparer.Ordinal))
+        {
+            WeaponShots.Add(new WeaponShots { Weapon = weapon, ShotsFired = count, Hits = hits.GetValueOrDefault(weapon) });
+        }
+
+        ShotsFired = WeaponShots.Sum(w => w.ShotsFired);
+        AccuracyHits = WeaponShots.Sum(w => w.Hits);
     }
 
     private void FinishBuilds(float start)

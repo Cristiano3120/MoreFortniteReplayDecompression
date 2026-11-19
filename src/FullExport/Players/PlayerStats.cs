@@ -36,6 +36,7 @@ public sealed partial class PlayerStats
     internal List<(float T, float Amount)> RawHealthLoss { get; } = [];
     internal List<(float T, bool Downed)> RawDownedChanges { get; } = [];
     internal List<WeaponChange> RawWeaponChanges { get; } = [];
+    internal List<(float T, string Weapon)> RawShots { get; } = [];
     internal List<BuildEvent> RawBuilds { get; } = [];
     internal List<EliminationEvent> RawEliminations { get; } = [];
     internal List<EliminationEvent> RawDeaths { get; } = [];
@@ -308,6 +309,43 @@ public sealed partial class PlayerStats
 
     /// <summary>Every weapon / item the player switched to, in replay order.</summary>
     public List<WeaponChange> EquippedWeapons { get; } = [];
+
+    // --- Shots fired and accuracy
+    /// <summary>
+    /// Shots fired since the match start: one per bullet, shell or projectile, so one per ammo used. A burst counts every bullet,
+    /// a shotgun shot counts once (not per pellet), a slingshot or launcher shot once. Melee hits (pickaxe) and items that are no
+    /// weapons (sprays, brooms, grapple gloves, ...) are not shots.
+    /// <para>
+    /// The replay has no shot event: a shot is read from the weapon (its ammo goes down, its fire time changes), so only shots of
+    /// weapons that were relevant for the recording are known. Like all stats this is complete for the replay owner and the players
+    /// near them in a client replay, and for everyone in a server replay. A shot right before a reload can be missed when the ammo
+    /// went down and up again between two updates of the weapon.
+    /// </para>
+    /// </summary>
+    public int ShotsFired { get; internal set; }
+
+    /// <summary>Shots fired and hits per weapon class, most shots first (see <see cref="ShotsFired"/>).</summary>
+    public List<WeaponShots> WeaponShots { get; } = [];
+
+    /// <summary>
+    /// Hits on other players with the weapons in <see cref="WeaponShots"/> since the match start: the hits that go with
+    /// <see cref="ShotsFired"/>. Unlike <see cref="Hits"/> it leaves out hits with weapons that fire no shots (pickaxe) and hits
+    /// on the player themself. Hits on knocked players and teammates count.
+    /// </summary>
+    public int AccuracyHits { get; internal set; }
+
+    /// <summary>
+    /// <see cref="AccuracyHits"/> / <see cref="ShotsFired"/>: the share of shots that hit a player, <c>null</c> without shots.
+    /// <para>
+    /// Not the same as Epic's accuracy (<see cref="EpicAccuracy"/>). Epic counts every shotgun pellet as a shot and every pellet that
+    /// hits as a hit (checked on the skin cup replays: one break action shotgun shot = 10 shots for Epic, a pump shot = 12). The
+    /// replay only has one hit per shot and victim, not the pellets, so Epic's value cannot be computed from it.
+    /// </para>
+    /// </summary>
+    public float? Accuracy => ShotsFired > 0 ? (float)AccuracyHits / ShotsFired : null;
+
+    /// <summary>Epic's own accuracy from the end-of-match stats (0..1), only for the replay owner. Counts shotgun pellets, see <see cref="Accuracy"/>.</summary>
+    public float? EpicAccuracy => EpicMatchStats?.Accuracy;
 
     public List<PlayerStats> Teammates { get; } = [];
 

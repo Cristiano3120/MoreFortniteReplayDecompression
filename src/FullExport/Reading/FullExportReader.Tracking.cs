@@ -351,6 +351,17 @@ public sealed partial class FullExportReader
             weaponGuid = new ChannelGuid(cue.SourceWeapon!.Value);
         }
 
+        // Some weapons (shotguns, some pistols) send one cue per shot with bWeaponActivate, also when the shot misses.
+        if (_settings.TrackShots && cue.bWeaponActivate == true && weaponFromCue)
+        {
+            WeaponFire fire = WeaponFireOf(weaponGuid!.Value);
+            fire.ActivateCues.Add(CurrentTimeSeconds);
+            if (attackerPawn != 0)
+            {
+                fire.Instigator ??= attackerPawn;
+            }
+        }
+
         ChannelGuid? victim = cue.HitActor is > 0
             ? new ChannelGuid(cue.HitActor.Value)
             : null;

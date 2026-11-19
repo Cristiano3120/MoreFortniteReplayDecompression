@@ -51,6 +51,11 @@ public sealed class ExportSettings
     /// <summary>Damage cues (<see cref="BatchedDamageCues"/> and the gameplay cues of projectile hits). Off: no damage dealt / taken and no hits.</summary>
     public bool TrackHits { get; init; } = true;
 
+    /// <summary>
+    /// Shots fired per weapon and accuracy (<see cref="PlayerStats.ShotsFired"/>). Off: the ammo and fire time of the weapons are not read.
+    /// </summary>
+    public bool TrackShots { get; init; } = true;
+
     /// <summary>Pawn positions. Off: no time in storm, storm damage, distance traveled and supply drop distances.</summary>
     public bool TrackPositions { get; init; } = true;
 

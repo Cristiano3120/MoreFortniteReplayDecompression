@@ -40,6 +40,7 @@ public sealed partial class FullExportReader
         SupplyDrops = BuildSupplyDrops(replay);
 
         AssignHits();
+        AssignShots();
         AssignPawnData();
         AssignBuilds();
         AssignEliminations(replay, players);

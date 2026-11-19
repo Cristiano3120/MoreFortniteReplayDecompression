@@ -10,6 +10,7 @@ into easy to use stats per player, and fixes a few bugs in the library itself.
 ## Features
 
 - **Damage and hits:** damage dealt and taken, hits, headshots, shield hits, damage to knocked players, damage to builds, every single hit with weapon and location
+- **Shots and accuracy:** shots fired per weapon (also slingshots and launchers), hits per weapon, accuracy
 - **Eliminations:** knocks, eliminations, assists, deaths, time alive
 - **Health:** health and shield over time, final health, health and shield healed
 - **Building:** every piece a player built, materials used per type (wood, stone, metal)
@@ -59,6 +60,20 @@ Console.WriteLine($"Headshots:    {player.CriticalHits}");
 Console.WriteLine($"Time alive:   {TimeSpan.FromSeconds(player.TimeAlive).ToString(@"mm\:ss")}");
 Console.WriteLine($"Distance:     {player.DistanceTraveled:F0} m");
 ```
+
+### Shots and accuracy
+
+```csharp
+Console.WriteLine($"Shots fired: {player.ShotsFired}, accuracy {player.Accuracy:P1}");
+
+foreach (WeaponShots weapon in player.WeaponShots)
+{
+    Console.WriteLine($"{weapon.Weapon}: {weapon.ShotsFired} shots, {weapon.Hits} hits ({weapon.Accuracy:P1})");
+}
+```
+
+One shot is one bullet, shell or projectile: a shotgun shot counts once. Epic's own accuracy (`player.EpicAccuracy`, only for the
+player who recorded the replay) counts every shotgun pellet instead, so the two values differ when shotguns were used.
 
 ### Building and materials
 
