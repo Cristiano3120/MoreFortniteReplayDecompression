@@ -23,7 +23,7 @@ into easy to use stats per player, and fixes a few bugs in the library itself.
 
 ## Getting Started
 
-.NET 10.0 is required.
+.NET 10.0 or .NET 11.0 is required.
 
 Install the [NuGet package](https://www.nuget.org/packages/MoreFortniteReplayDecompression):
 
