@@ -54,6 +54,9 @@ public sealed partial class FullExportReader
             p.Finish(context);
         }
 
+        // Fights need the finished hits and eliminations of both players.
+        FightBuilder.Assign(players, StormPhases);
+
         players.Sort((a, b) => (a.Placement ?? int.MaxValue).CompareTo(b.Placement ?? int.MaxValue));
         return players;
     }

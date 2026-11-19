@@ -310,6 +310,43 @@ public sealed partial class PlayerStats
     /// <summary>Every weapon / item the player switched to, in replay order.</summary>
     public List<WeaponChange> EquippedWeapons { get; } = [];
 
+    // --- Fights and time to kill
+    /// <summary>
+    /// Every fight of this player against one opponent since the match start, in time order (see <see cref="FightEvent"/> for how a
+    /// fight is found and <see cref="FightRules"/> for when it ends). A fight against a team is one fight per opponent player.
+    /// </summary>
+    public List<FightEvent> Fights { get; } = [];
+
+    /// <summary>Fights in which this player knocked or eliminated the opponent.</summary>
+    public int FightsWon => Fights.Count(f => f.Outcome == FightOutcome.Won);
+
+    /// <summary>Fights in which the opponent knocked or eliminated this player.</summary>
+    public int FightsLost => Fights.Count(f => f.Outcome == FightOutcome.Lost);
+
+    /// <summary>
+    /// Average seconds from this player's first hit to knocking the opponent, over all fights with a knock by this player
+    /// (<see cref="FightEvent.TimeToKnock"/>). <c>null</c> without such a fight.
+    /// </summary>
+    public float? AverageTimeToKnock => Average(Fights.Select(f => f.TimeToKnock));
+
+    /// <summary>Fastest <see cref="FightEvent.TimeToKnock"/> of this player, <c>null</c> without a knock in a fight.</summary>
+    public float? FastestTimeToKnock => Fights.Min(f => f.TimeToKnock);
+
+    /// <summary>
+    /// Average seconds from this player's first hit to the opponent's elimination credited to this player, including finishing the
+    /// knocked opponent (<see cref="FightEvent.TimeToKill"/>). <c>null</c> without such a fight.
+    /// </summary>
+    public float? AverageTimeToKill => Average(Fights.Select(f => f.TimeToKill));
+
+    /// <summary>Fastest <see cref="FightEvent.TimeToKill"/> of this player, <c>null</c> without an elimination in a fight.</summary>
+    public float? FastestTimeToKill => Fights.Min(f => f.TimeToKill);
+
+    private static float? Average(IEnumerable<float?> values)
+    {
+        List<float> known = [.. values.Where(v => v is not null).Select(v => v!.Value)];
+        return known.Count > 0 ? known.Average() : null;
+    }
+
     // --- Shots fired and accuracy
     /// <summary>
     /// Shots fired since the match start: one per bullet, shell or projectile, so one per ammo used. A burst counts every bullet,

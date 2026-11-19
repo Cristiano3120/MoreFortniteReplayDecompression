@@ -10,6 +10,7 @@ into easy to use stats per player, and fixes a few bugs in the library itself.
 ## Features
 
 - **Damage and hits:** damage dealt and taken, hits, headshots, shield hits, damage to knocked players, damage to builds, every single hit with weapon and location
+- **Fights:** every fight against an opponent with duration, damage and outcome, time to knock and time to kill
 - **Shots and accuracy:** shots fired per weapon (also slingshots and launchers), hits per weapon, accuracy
 - **Eliminations:** knocks, eliminations, assists, deaths, time alive
 - **Health:** health and shield over time, final health, health and shield healed
@@ -74,6 +75,24 @@ foreach (WeaponShots weapon in player.WeaponShots)
 
 One shot is one bullet, shell or projectile: a shotgun shot counts once. Epic's own accuracy (`player.EpicAccuracy`, only for the
 player who recorded the replay) counts every shotgun pellet instead, so the two values differ when shotguns were used.
+
+### Fights and time to kill
+
+```csharp
+Console.WriteLine($"Fights won: {player.FightsWon}, lost: {player.FightsLost}");
+Console.WriteLine($"Time to knock: {player.AverageTimeToKnock:F1} s (fastest {player.FastestTimeToKnock:F1} s)");
+Console.WriteLine($"Time to kill:  {player.AverageTimeToKill:F1} s (fastest {player.FastestTimeToKill:F1} s)");
+
+foreach (FightEvent fight in player.Fights)
+{
+    Console.WriteLine($"{fight.Start:F0}s vs {fight.Opponent.Name}: {fight.Duration:F1} s, {fight.Outcome}, time to knock {fight.TimeToKnock:F1} s");
+}
+```
+
+The replay has no fights, so they are built from the hits between two players. A fight ends when one of them is eliminated,
+when they were more than 100 m apart for over 30 s, or after 3 minutes without a hit. From zone 5 on everybody is close
+together, so there a fight already ends after 30 s without a hit. Time to knock and time to kill are counted from the
+player's own first hit in the fight.
 
 ### Building and materials
 
