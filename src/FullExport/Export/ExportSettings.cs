@@ -63,6 +63,13 @@ public sealed class ExportSettings
     /// <summary>Pawn positions. Off: no time in storm, storm damage, distance traveled and supply drop distances.</summary>
     public bool TrackPositions { get; init; } = true;
 
+    /// <summary>
+    /// Velocity, rotation and states (crouched, sprinting, aiming, skydiving, ...) for every stored position
+    /// (<see cref="PlayerStats.Movement"/>). Needs <see cref="TrackPositions"/> and follows <see cref="PositionInterval"/>.
+    /// Off by default because it needs a lot of memory with a small interval. Off: <see cref="PlayerStats.Movement"/> stays empty.
+    /// </summary>
+    public bool TrackMovementDetails { get; init; }
+
     /// <summary>Weapon changes of the players (<see cref="PlayerStats.EquippedWeapons"/>).</summary>
     public bool TrackWeapons { get; init; } = true;
 

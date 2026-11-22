@@ -298,6 +298,12 @@ public sealed partial class PlayerStats
     /// </summary>
     public List<PositionSample> Positions { get; } = [];
 
+    /// <summary>
+    /// Velocity, rotation and states (crouched, sprinting, skydiving, ...) of the pawn, one sample for every entry in
+    /// <see cref="Positions"/>. Empty unless <see cref="Export.ExportSettings.TrackMovementDetails"/> is on.
+    /// </summary>
+    public List<MovementSample> Movement { get; } = [];
+
     /// <summary>Horizontal distance the pawn moved on the ground since the match start, in meters (skydiving, gliding and teleports excluded).</summary>
     public float DistanceTraveled { get; private set; }
 

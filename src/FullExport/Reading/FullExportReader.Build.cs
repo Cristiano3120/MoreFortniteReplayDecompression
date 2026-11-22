@@ -124,6 +124,7 @@ public sealed partial class FullExportReader
         foreach (PlayerStats stats in _stats.Values)
         {
             stats.Positions.Clear();
+            stats.Movement.Clear();
             stats.RawDownedChanges.Clear();
             stats.RawWeaponChanges.Clear();
             stats.RawDistance = 0;
@@ -139,6 +140,11 @@ public sealed partial class FullExportReader
             if (_pawnPositions.TryGetValue(pawn, out List<PositionSample>? positions))
             {
                 player.Positions.AddRange(positions);
+            }
+
+            if (_pawnMovement.TryGetValue(pawn, out List<MovementSample>? movement))
+            {
+                player.Movement.AddRange(movement);
             }
 
             if (_pawnDownedChanges.TryGetValue(pawn, out List<(float T, bool Downed)>? downed))
@@ -161,6 +167,7 @@ public sealed partial class FullExportReader
         foreach (PlayerStats stats in _stats.Values)
         {
             stats.Positions.Sort((a, b) => a.T.CompareTo(b.T));
+            stats.Movement.Sort((a, b) => a.T.CompareTo(b.T));
             stats.RawDownedChanges.Sort((a, b) => a.T.CompareTo(b.T));
             stats.RawWeaponChanges.Sort((a, b) => a.T.CompareTo(b.T));
         }

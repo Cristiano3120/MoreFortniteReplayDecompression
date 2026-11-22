@@ -71,6 +71,8 @@ public sealed partial class FullExportReader : ReplayReader
     private readonly Dictionary<ChannelGuid, FVector> _pawnLastLocation = new();
     private readonly Dictionary<ChannelGuid, double> _pawnDistance = new();
     private readonly Dictionary<ChannelGuid, (bool Skydiving, bool Parachute)> _pawnInAir = new();
+    private readonly Dictionary<ChannelGuid, MovementFlags> _pawnMovementFlags = new();   // last known state, flags are only sent on change
+    private readonly Dictionary<ChannelGuid, List<MovementSample>> _pawnMovement = new();
 
     // Match-wide data
     private readonly List<(float ReplayT, double WorldT)> _worldTimes = [];

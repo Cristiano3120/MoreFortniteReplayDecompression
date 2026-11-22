@@ -44,6 +44,9 @@ public sealed partial class FullExportReader
             _channelGuid[channelIndex] = cGuid;
             _guidArchetype[cGuid] = archetype;
             _guidChannel[cGuid] = channelIndex;
+
+            // A pawn that becomes relevant again only gets its non-default states sent, so the old ones are stale.
+            _pawnMovementFlags.Remove(cGuid);
         }
 
         if (_collectTimeline)

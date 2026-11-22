@@ -83,13 +83,18 @@ public sealed partial class FullExportReader
                     _pawnInAir[pawnGuid] = (pawn.bIsSkydiving ?? air.Skydiving, pawn.bIsParachuteOpen ?? air.Parachute);
                 }
 
-                if (pawn.ReplicatedMovement?.Location is { } location)
+                if (_settings.TrackMovementDetails)
+                {
+                    _pawnMovementFlags[pawnGuid] = UpdateMovementFlags(_pawnMovementFlags.GetValueOrDefault(pawnGuid), pawn);
+                }
+
+                if (pawn.ReplicatedMovement is { Location: { } location } movement)
                 {
                     _pawnCurrentLocation[pawnGuid] = location;
 
                     if (_settings.TrackPositions)
                     {
-                        TrackPosition(pawnGuid, location);
+                        TrackPosition(pawnGuid, location, movement);
                     }
                 }
 
@@ -245,7 +250,7 @@ public sealed partial class FullExportReader
     /// Like Epic's "distance traveled" only the horizontal distance counts and skydiving / gliding is left out
     /// (checked on the skin cup replays: 36.8 km vs. Epic's 35.6 km over 11 matches; with height and skydiving it was 51 km).
     /// </summary>
-    private void TrackPosition(ChannelGuid pawnGuid, FVector location)
+    private void TrackPosition(ChannelGuid pawnGuid, FVector location, FRepMovement movement)
     {
         (bool skydiving, bool parachute) = _pawnInAir.GetValueOrDefault(pawnGuid);
         bool inAir = skydiving || parachute;
@@ -269,6 +274,44 @@ public sealed partial class FullExportReader
         }
 
         AddToList(_pawnPositions, pawnGuid, new PositionSample(CurrentTimeSeconds, location));
+
+        if (_settings.TrackMovementDetails)
+        {
+            AddToList(_pawnMovement, pawnGuid, new MovementSample(CurrentTimeSeconds, location,
+                movement.LinearVelocity ?? new FVector(0, 0, 0), movement.Rotation ?? new FRotator(0, 0, 0), _pawnMovementFlags.GetValueOrDefault(pawnGuid)));
+        }
+    }
+
+    /// <summary>
+    /// Applies the states sent in this pawn update to the last known ones. <c>null</c> = not sent (unchanged),
+    /// so only the sent values change a flag.
+    /// </summary>
+    private static MovementFlags UpdateMovementFlags(MovementFlags flags, PlayerPawn pawn)
+    {
+        flags = Set(flags, MovementFlags.Crouched, pawn.bIsCrouched);
+        flags = Set(flags, MovementFlags.Jumping, pawn.bIsJumping);
+        flags = Set(flags, MovementFlags.Sprinting, pawn.bIsTacticalSprinting);
+        flags = Set(flags, MovementFlags.Targeting, pawn.bIsTargeting);
+        flags = Set(flags, MovementFlags.SlopeSliding, pawn.bIsSlopeSliding);
+        flags = Set(flags, MovementFlags.Skydiving, pawn.bIsSkydiving);
+        flags = Set(flags, MovementFlags.Gliding, pawn.bIsParachuteOpen);
+        flags = Set(flags, MovementFlags.SkydivingFromBus, pawn.bIsSkydivingFromBus);
+        flags = Set(flags, MovementFlags.SkydivingFromLaunchPad, pawn.bIsSkydivingFromLaunchPad);
+        flags = Set(flags, MovementFlags.GliderRedeploy, pawn.bInGliderRedeploy);
+        flags = Set(flags, MovementFlags.WaterSprintBoost, pawn.bIsWaterSprintBoost);
+        flags = Set(flags, MovementFlags.WaterJump, pawn.bIsWaterJump);
+        flags = Set(flags, MovementFlags.Downed, pawn.bIsDBNO);
+        flags = Set(flags, MovementFlags.PlayingEmote, pawn.bIsPlayingEmote);
+        flags = Set(flags, MovementFlags.WeaponHolstered, pawn.bWeaponHolstered);
+        flags = Set(flags, MovementFlags.InStorm, pawn.bIsInAnyStorm);
+        return flags;
+
+        static MovementFlags Set(MovementFlags flags, MovementFlags flag, bool? value) => value switch
+        {
+            true => flags | flag,
+            false => flags & ~flag,
+            null => flags,
+        };
     }
 
     /// <summary>
