@@ -286,7 +286,7 @@ public sealed partial class FullExportReader
     /// Applies the states sent in this pawn update to the last known ones. <c>null</c> = not sent (unchanged),
     /// so only the sent values change a flag.
     /// </summary>
-    private static MovementFlags UpdateMovementFlags(MovementFlags flags, PlayerPawn pawn)
+    internal static MovementFlags UpdateMovementFlags(MovementFlags flags, PlayerPawn pawn)
     {
         flags = Set(flags, MovementFlags.Crouched, pawn.bIsCrouched);
         flags = Set(flags, MovementFlags.Jumping, pawn.bIsJumping);

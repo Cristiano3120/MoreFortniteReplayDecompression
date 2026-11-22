@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MoreFortniteReplayDecompression.Test</RootNamespace>
+  </PropertyGroup>
+
+  <!-- FullExport hides the forked library projects from its references (they are bundled in its NuGet package), so they are referenced here too -->
+  <ItemGroup>
+    <ProjectReference Include="..\FullExport\MoreFortniteReplayDecompression.csproj" />
+    <ProjectReference Include="..\FortniteReplayReader\FortniteReplayReader.csproj" />
+    <ProjectReference Include="..\Unreal.Core\Unreal.Core.csproj" />
+  </ItemGroup>
+</Project>
