@@ -42,7 +42,11 @@ public sealed class ExportSettings
     /// <summary><c>true</c>: store every read export group as typed time series (<see cref="ReplayExport.Timeline"/>). Costs time and memory.</summary>
     public bool CollectTimeline { get; init; } = true;
 
-    /// <summary>Seconds between two stored pawn positions per player (timeline and <see cref="PlayerStats.Positions"/>).</summary>
+    /// <summary>
+    /// Seconds between two stored pawn positions per player (timeline and <see cref="PlayerStats.Positions"/>).
+    /// 0 = store every movement update. The distance traveled always uses every update, whatever the interval.
+    /// Time in storm and supply drop distances are computed from the stored positions, so a smaller interval makes them finer.
+    /// </summary>
     public float PositionInterval { get; init; } = 1f;
 
     /// <summary>Health and shield of the players (<see cref="HealthSet"/>). Off: no health timeline, healing and storm damage.</summary>

@@ -21,6 +21,12 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
 {
     private FortniteReplayBuilder Builder;
 
+    /// <summary>
+    /// <c>true</c> (default): store every movement update of every pawn in <see cref="PlayerData.Locations"/>.
+    /// That is one object per update (millions per match, hundreds of MB), so readers that track positions themselves switch it off.
+    /// </summary>
+    protected bool TrackPlayerLocations { get; init; } = true;
+
     public ReplayReader(ILogger logger = null, ParseMode parseMode = ParseMode.Minimal) : base(logger, parseMode)
     {
     }
@@ -35,7 +41,7 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
         var bytes = File.ReadAllBytes(fileName);
         using var archive = new Unreal.Core.BinaryReader(bytes);
 
-        Builder = new FortniteReplayBuilder();
+        Builder = new FortniteReplayBuilder { TrackLocations = TrackPlayerLocations };
         ReadReplay(archive);
 
         return Builder.Build(Replay);
@@ -46,7 +52,7 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
     {
         using var archive = new Unreal.Core.BinaryReader(data);
 
-        Builder = new FortniteReplayBuilder();
+        Builder = new FortniteReplayBuilder { TrackLocations = TrackPlayerLocations };
         ReadReplay(archive);
 
         return Builder.Build(Replay);
@@ -56,7 +62,7 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
     {
         using var archive = new Unreal.Core.BinaryReader(stream);
 
-        Builder = new FortniteReplayBuilder();
+        Builder = new FortniteReplayBuilder { TrackLocations = TrackPlayerLocations };
         ReadReplay(archive);
 
         return Builder.Build(Replay);

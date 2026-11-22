@@ -292,7 +292,10 @@ public sealed partial class PlayerStats
     public List<HitEvent> PreMatchDamageTakenEvents { get; } = [];
 
     // --- Movement, storm, supply drops, weapons
-    /// <summary>Pawn positions over the whole replay (at most one per position interval). Only while the pawn was relevant for the recording client.</summary>
+    /// <summary>
+    /// Pawn positions over the whole replay (at most one per <see cref="Export.ExportSettings.PositionInterval"/>, 0 = every update).
+    /// Only while the pawn was relevant for the recording client.
+    /// </summary>
     public List<PositionSample> Positions { get; } = [];
 
     /// <summary>Horizontal distance the pawn moved on the ground since the match start, in meters (skydiving, gliding and teleports excluded).</summary>

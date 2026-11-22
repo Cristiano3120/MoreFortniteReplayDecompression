@@ -182,6 +182,8 @@ public sealed partial class FullExportReader : ReplayReader
     public FullExportReader(ExportSettings settings, ILogger? logger = null)
         : base(logger!, ParseMode.Full, settings.GetIgnoredTypes())
     {
+        // The library would keep every movement update of every pawn (millions of objects); positions are tracked here instead.
+        TrackPlayerLocations = false;
         _settings = settings;
         _positionInterval = settings.PositionInterval;
         _collectTimeline = settings.CollectTimeline;

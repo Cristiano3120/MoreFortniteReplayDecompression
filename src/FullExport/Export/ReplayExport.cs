@@ -10,7 +10,14 @@ namespace MoreFortniteReplayDecompression.Export;
 /// <summary>Complete result: the library's standard result plus the time series as typed objects.</summary>
 public sealed class ReplayExport
 {
-    /// <summary>The library's standard result (PlayerData, GameData, MapData, Eliminations, KillFeed, TeamData, ...).</summary>
+    /// <summary>
+    /// The library's standard result (PlayerData, GameData, MapData, Eliminations, KillFeed, TeamData, ...).
+    /// <para>
+    /// <see cref="PlayerData.Locations"/> is always empty here. The library would store every movement update of every pawn
+    /// (millions of objects and hundreds of MB per replay). Use <see cref="PlayerStats.Positions"/> instead
+    /// and set <see cref="ExportSettings.PositionInterval"/> to 0 to get every update.
+    /// </para>
+    /// </summary>
     public required FortniteReplay Replay { get; init; }
 
     /// <summary>Time, length, tournament, playlist and other small facts about the replay.</summary>

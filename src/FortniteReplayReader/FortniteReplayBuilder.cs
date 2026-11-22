@@ -10,6 +10,9 @@ namespace FortniteReplayReader;
 /// </summary>
 public class FortniteReplayBuilder
 {
+    /// <summary><c>false</c>: <see cref="PlayerData.Locations"/> stays empty instead of getting one entry per movement update.</summary>
+    public bool TrackLocations { get; init; } = true;
+
     private readonly GameData GameData = new();
     private readonly MapData MapData = new();
     private readonly List<KillFeedEntry> KillFeed = new();
@@ -371,7 +374,7 @@ public class FortniteReplayBuilder
             playerState.CurrentWeapon = pawn.CurrentWeapon;
         }
 
-        if (pawn.ReplicatedMovement != null)
+        if (TrackLocations && pawn.ReplicatedMovement != null)
         {
             var newLocation = new PlayerMovement
             {
