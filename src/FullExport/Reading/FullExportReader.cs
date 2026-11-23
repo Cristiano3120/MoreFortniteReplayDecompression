@@ -36,6 +36,10 @@ public sealed partial class FullExportReader : ReplayReader
         nameof(PlayerPawn.RemoteViewPitch), nameof(PlayerPawn.PackedReplicatedSlopeAngles), nameof(PlayerPawn.GravityScale),
     ];
 
+    // All pawn fields that go into a MovementEvent in the timeline (see AddPawnUpdate). RemoteViewData32 is not in
+    // NoisyPawnProps, so an update that carries it is always stored, but it is movement data too.
+    private static readonly HashSet<string> MovementPawnProps = [.. NoisyPawnProps, nameof(PlayerPawn.RemoteViewData32)];
+
     // The parser reuses ONE instance per group type and resets it on the next read.
     // A stored timeline entry therefore needs its own (shallow) copy.
     private static readonly MethodInfo CloneMethod =
@@ -175,14 +179,14 @@ public sealed partial class FullExportReader : ReplayReader
     /// <param name="logger">Optional logger, for example a <see cref="GroupLogger"/>.</param>
     /// <param name="collectTimeline"><c>false</c> = only collect <see cref="PlayerStats"/> (faster, less memory).</param>
     public FullExportReader(float positionInterval = 1f, ILogger? logger = null, bool collectTimeline = true)
-        : this(new ExportSettings { PositionInterval = positionInterval, CollectTimeline = collectTimeline }, logger)
+        : this(ExportSettings.AllStats(collectTimeline, positionInterval), logger)
     {
     }
 
     /// <param name="settings">What should be read, see <see cref="ExportSettings"/>.</param>
     /// <param name="logger">Optional logger, for example a <see cref="GroupLogger"/>.</param>
     public FullExportReader(ExportSettings settings, ILogger? logger = null)
-        : base(logger!, ParseMode.Full, settings.GetIgnoredTypes())
+        : base(logger!, ParseMode.Full, settings.GetIgnoredTypes(), settings.GetOnlyProperties())
     {
         // The library would keep every movement update of every pawn (millions of objects); positions are tracked here instead.
         TrackPlayerLocations = false;

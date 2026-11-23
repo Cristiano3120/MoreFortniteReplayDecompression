@@ -170,10 +170,19 @@ public class NetGuidCache
                 return null;
             }
 
-            // Only recheck a failed path if new export groups were added since the last try
-            if (_failedPaths.TryGetValue(path, out int knownGroups) && knownGroups == NetFieldExportGroupMap.Count)
+            // A path that failed before is only checked against the groups added since then: the groups checked last time did
+            // not match and cannot match later (their cleaned paths do not change). Checking all groups again whenever a single
+            // new group arrived was about a sixth of the read time of a server replay. Groups are kept in insertion order
+            // (a Dictionary without removals), so the new ones are the last ones; after a Clear everything is checked again.
+            int alreadyChecked = 0;
+            if (_failedPaths.TryGetValue(path, out int knownGroups))
             {
-                return null;
+                if (knownGroups == NetFieldExportGroupMap.Count)
+                {
+                    return null;
+                }
+
+                alreadyChecked = knownGroups < NetFieldExportGroupMap.Count ? knownGroups : 0;
             }
 
             if (NetFieldExportGroupMapPathFixed.TryGetValue(netguid.Value, out group))
@@ -182,8 +191,14 @@ public class NetGuidCache
                 return group;
             }
 
+            int position = 0;
             foreach (var groupPathKvp in NetFieldExportGroupMap)
             {
+                if (position++ < alreadyChecked)
+                {
+                    continue;
+                }
+
                 var groupPath = groupPathKvp.Key;
 
                 if (!_cleanedPaths.TryGetValue(groupPathKvp.Value.PathNameIndex, out var groupPathFixed))
@@ -202,8 +217,14 @@ public class NetGuidCache
             }
 
             var cleanedPath = path.CleanPathSuffix();
+            position = 0;
             foreach (var groupPathKvp in NetFieldExportGroupMap)
             {
+                if (position++ < alreadyChecked)
+                {
+                    continue;
+                }
+
                 var groupPath = groupPathKvp.Key;
 
                 if (_cleanedPaths.TryGetValue(groupPathKvp.Value.PathNameIndex, out var groupPathFixed))

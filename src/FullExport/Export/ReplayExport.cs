@@ -23,7 +23,14 @@ public sealed class ReplayExport
     /// <summary>Time, length, tournament, playlist and other small facts about the replay.</summary>
     public required ReplayMetadata Metadata { get; init; }
 
-    /// <summary>All entries in replay order (ascending time). Empty if the timeline was not collected.</summary>
+    /// <summary>
+    /// All entries in replay order (ascending time). Empty if the timeline was not collected.
+    /// <para>
+    /// The entries are of different types. To get one type with IntelliSense use the properties below instead of <c>OfType</c>:
+    /// <see cref="Exports"/>, <see cref="Movements"/>, <see cref="NetDeltas"/>, <see cref="ChannelsOpened"/>,
+    /// <see cref="ChannelsClosed"/> and <see cref="Damage"/>.
+    /// </para>
+    /// </summary>
     public required List<TimelineEvent> Timeline { get; init; }
 
     /// <summary>Actor GUID to channel (last known). Useful to resolve references like <c>PlayerPawn.PlayerState</c>.</summary>
@@ -55,13 +62,34 @@ public sealed class ReplayExport
     public PlayerStats? Player(string name) =>
         Players.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>All updates of one group class, for example <c>Of&lt;PlayerPawn&gt;()</c> or <c>Of&lt;HealthSet&gt;()</c>.</summary>
+    /// <summary>
+    /// All updates of one group class, for example <c>Of&lt;PlayerPawn&gt;()</c> or <c>Of&lt;HealthSet&gt;()</c>.
+    /// For <c>PlayerPawn</c> the movement fields are always empty here; they are in <see cref="Movements"/>.
+    /// </summary>
     public IEnumerable<(float T, ChannelIndex Channel, TGroup Data)> Of<TGroup>() where TGroup : class, INetFieldExportGroup =>
-        Timeline.OfType<ExportEvent>().Where(e => e.Group is TGroup).Select(e => (e.T, e.Channel, (TGroup)e.Group));
+        Exports.Where(e => e.Group is TGroup).Select(e => (e.T, e.Channel, (TGroup)e.Group));
 
     /// <summary>All list-element updates of one class, for example <c>DeltasOf&lt;FortClientObservedStat&gt;()</c>.</summary>
     public IEnumerable<NetDeltaEvent> DeltasOf<TGroup>() where TGroup : class, INetFieldExportGroup =>
-        Timeline.OfType<NetDeltaEvent>().Where(e => e.Group is TGroup);
+        NetDeltas.Where(e => e.Group is TGroup);
+
+    /// <summary>All export group updates (every group class), see <see cref="Of{TGroup}"/> for one class.</summary>
+    public IEnumerable<ExportEvent> Exports => Timeline.OfType<ExportEvent>();
+
+    /// <summary>
+    /// Movement of the pawns (position, rotation, velocity, view direction, ...), split off the <c>PlayerPawn</c> updates.
+    /// Filter by <see cref="TimelineEvent.Channel"/> for one pawn. For per-player positions <see cref="PlayerStats.Positions"/> is easier.
+    /// </summary>
+    public IEnumerable<MovementEvent> Movements => Timeline.OfType<MovementEvent>();
+
+    /// <summary>All list-element updates (inventory items, stat counters, ...), see <see cref="DeltasOf{TGroup}"/> for one class.</summary>
+    public IEnumerable<NetDeltaEvent> NetDeltas => Timeline.OfType<NetDeltaEvent>();
+
+    /// <summary>Actors that appeared, with class (archetype) and spawn transform.</summary>
+    public IEnumerable<ChannelOpenedEvent> ChannelsOpened => Timeline.OfType<ChannelOpenedEvent>();
+
+    /// <summary>Actors that were destroyed or went out of relevance.</summary>
+    public IEnumerable<ChannelClosedEvent> ChannelsClosed => Timeline.OfType<ChannelClosedEvent>();
 
     /// <summary>All derived damage events (health/shield decrease), regardless of the match start.</summary>
     public IEnumerable<DerivedDamageEvent> Damage => Timeline.OfType<DerivedDamageEvent>();

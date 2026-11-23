@@ -5,6 +5,7 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<IsPackable>false</IsPackable>
+        <ServerGarbageCollection>true</ServerGarbageCollection>
 	</PropertyGroup>
 
 	<!-- FullExport hides the forked library projects from its references (they are bundled in its NuGet package), so they are referenced here too -->

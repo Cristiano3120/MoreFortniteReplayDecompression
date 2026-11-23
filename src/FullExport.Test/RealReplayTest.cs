@@ -101,7 +101,7 @@ public class RealReplayTest
     {
         string replay = Replays()[0];
         ReplayExport without = ReplayExporter.Read(replay, ExportSettings.StatsOnly);
-        ReplayExport with = ReplayExporter.Read(replay, new ExportSettings { CollectTimeline = false, TrackMovementDetails = true });
+        ReplayExport with = ReplayExporter.Read(replay, ExportSettings.StatsOnly with { TrackMovementDetails = true });
 
         Assert.All(without.Players, p => Assert.Empty(p.Movement));
         Assert.Contains(with.Players, p => p.Movement.Count > 0);
@@ -115,13 +115,30 @@ public class RealReplayTest
     [Fact]
     public void SwitchedOffPositionsAreEmpty()
     {
-        ReplayExport export = ReplayExporter.Read(Replays()[0], new ExportSettings { CollectTimeline = false, TrackPositions = false });
+        ReplayExport export = ReplayExporter.Read(Replays()[0], ExportSettings.StatsOnly with { TrackPositions = false });
 
         Assert.All(export.Players, p =>
         {
             Assert.Empty(p.Positions);
             Assert.Equal(0, p.DistanceTraveled);
         });
+    }
+
+    [Fact]
+    public void SkippedMovementDoesNotChangeHitsAndHealth()
+    {
+        // Without positions and builds the pawn movement is not decoded at all; nothing else may change because of that
+        string replay = Replays()[0];
+        ReplayExport stats = ReplayExporter.Read(replay, ExportSettings.StatsOnly);
+        ReplayExport hitsOnly = ReplayExporter.Read(replay, new ExportSettings { TrackHits = true, TrackHealth = true });
+
+        static string Values(ReplayExport export) => string.Join("\n", export.Players.Concat(export.Bots)
+            .OrderBy(p => p.Name, StringComparer.Ordinal).ThenBy(p => p.Channel.Value)
+            .Select(p => $"{p.Name} {p.DamageDealt} {p.DamageTaken} {p.Hits} {p.CriticalHits} {p.Knocks} {p.Eliminations} {p.HealthHealed} {p.ShieldHealed} {p.OverkillDamage}"));
+
+        Assert.Equal(Values(stats), Values(hitsOnly));
+        Assert.Contains(hitsOnly.Players, p => p.DamageDealt > 0);
+        Assert.All(hitsOnly.Players, p => Assert.Empty(p.Positions));
     }
 
     [Fact]

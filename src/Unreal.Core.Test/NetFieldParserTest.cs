@@ -186,6 +186,51 @@ public class NetFieldParserTest
     }
 
     [Fact]
+    public void PropertyNotInOnlyPropertiesIsNotRead()
+    {
+        var reader = new NetBitReader(new byte[] { 0x01 }, 1);
+        var export = new NetFieldExport() { Handle = 0, Name = "bField" };
+        var group = new NetFieldExportGroup()
+        {
+            PathName = "group1",
+            NetFieldExportsLength = 1,
+            NetFieldExports = new NetFieldExport[] { export },
+            PathNameIndex = 1
+        };
+
+        var only = new Dictionary<Type, IReadOnlySet<string>> { [typeof(NetFieldGroup1)] = new HashSet<string> { nameof(NetFieldGroup1.VectorField) } };
+        var parser = new NetFieldParser(new NetGuidCache(), ParseMode.Full, "Unreal.Core.Test", onlyProperties: only);
+
+        var data = parser.CreateType(group.PathName);
+
+        // false = not read, so the caller skips the bits of this export from now on
+        Assert.False(parser.ReadField(data, export, export.Handle, group, reader));
+        Assert.False(((NetFieldGroup1)data).bField);
+        Assert.True(parser.WillReadType("group1"));
+    }
+
+    [Fact]
+    public void OnlyPropertiesKeepsTheListedProperties()
+    {
+        var reader = new NetBitReader(new byte[] { 0x01 }, 1);
+        var export = new NetFieldExport() { Handle = 0, Name = "bField" };
+        var group = new NetFieldExportGroup()
+        {
+            PathName = "group1",
+            NetFieldExportsLength = 1,
+            NetFieldExports = new NetFieldExport[] { export },
+            PathNameIndex = 1
+        };
+
+        var only = new Dictionary<Type, IReadOnlySet<string>> { [typeof(NetFieldGroup1)] = new HashSet<string> { nameof(NetFieldGroup1.bField) } };
+        var parser = new NetFieldParser(new NetGuidCache(), ParseMode.Full, "Unreal.Core.Test", onlyProperties: only);
+
+        var data = parser.CreateType(group.PathName);
+        Assert.True(parser.ReadField(data, export, export.Handle, group, reader));
+        Assert.True(((NetFieldGroup1)data).bField);
+    }
+
+    [Fact]
     public void ReadGuidFieldTest()
     {
         var reader = new NetBitReader(new byte[] { 0x87, 0x04 });

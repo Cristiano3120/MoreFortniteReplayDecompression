@@ -140,20 +140,24 @@ bool knocked = player.IsDowned(t);
 
 ### Read faster
 
-Turn off what you don't need. Switched off data is not parsed at all.
+Every switch is off by default, so you only pay for what you turn on. Switched off data is not parsed at all.
 
 ```csharp
 ExportSettings settings = new()
 {
-    CollectTimeline = false, // no full timeline of every update (biggest saving)
-    TrackHealth = false,     // no health / shield
-    TrackBuilds = false,     // no builds and materials
+    TrackHits = true,      // damage and hits
+    TrackPositions = true, // positions, storm and distance
 };
 
 ReplayExport export = ReplayExporter.Read("your-amazing-fortnite.replay", settings);
 ```
 
-`ExportSettings.StatsOnly` keeps all stats but skips the timeline. `ExportSettings.Full` reads everything.
+`ExportSettings.StatsOnly` turns on all stats but no timeline. `ExportSettings.Full` also collects the full timeline
+(`CollectTimeline`), which is the biggest cost. Start from one of them and change single switches with `with`:
+
+```csharp
+ExportSettings settings = ExportSettings.StatsOnly with { TrackBuilds = false };
+```
 
 ### Only the metadata
 

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using Unreal.Core.Attributes;
@@ -23,6 +24,7 @@ public class NetFieldParser
     private readonly Dictionary<Type, RepLayoutCmdType> _primitiveTypeLayout = new();
     private readonly Dictionary<string, ClassNetCacheInfo> _classNetCacheToNetFieldGroup = new();
     private readonly CompiledLinqCache _linqCache = new();
+    private readonly IReadOnlyDictionary<Type, IReadOnlySet<string>>? _onlyProperties;
 
     // Groups registered by path prefix. A matching path is added to NetFieldGroups as an alias on first use.
     private readonly List<(string Prefix, NetFieldGroupInfo Info)> _prefixGroups = new();
@@ -38,9 +40,15 @@ public class NetFieldParser
     /// Export group types that are not parsed even if their parse mode would allow it. The parser skips their data completely,
     /// which saves time if the data is not needed (for example health or damage cues).
     /// </param>
-    public NetFieldParser(NetGuidCache cache, ParseMode mode, string assemblyNameFilter = "ReplayReader", IReadOnlySet<Type>? ignoredTypes = null)
+    /// <param name="onlyProperties">
+    /// Per export group type the names of the only properties that are read; all other properties of that type are skipped by
+    /// their bit length without decoding them (they stay <c>null</c>). Types that are not in it are read completely.
+    /// </param>
+    public NetFieldParser(NetGuidCache cache, ParseMode mode, string assemblyNameFilter = "ReplayReader", IReadOnlySet<Type>? ignoredTypes = null,
+        IReadOnlyDictionary<Type, IReadOnlySet<string>>? onlyProperties = null)
     {
         GuidCache = cache;
+        _onlyProperties = onlyProperties;
 
         var types = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.FullName.Contains(assemblyNameFilter) || a.FullName.Contains("Unreal.Core"))
@@ -194,7 +202,117 @@ public class NetFieldParser
     /// <summary>
     /// https://codeblog.jonskeet.uk/2008/08/09/making-reflection-fly-and-exploring-delegates/
     /// </summary>
-    private static Action<INetFieldExportGroup, object> CreateSetter(PropertyInfo propertyInfo)
+    /// <summary>
+    /// The read method of a plain value per command type: the same methods <see cref="ReadDataType"/> uses. Command types that are
+    /// not in here (structs that implement <see cref="IProperty"/>, arrays, movement) keep the general path.
+    /// </summary>
+    private static readonly Dictionary<RepLayoutCmdType, (string Method, object[] Arguments)> TypedReadMethods = new()
+    {
+        [RepLayoutCmdType.PropertyBool] = (nameof(NetBitReader.SerializePropertyBool), []),
+        [RepLayoutCmdType.PropertyName] = (nameof(NetBitReader.SerializePropertyName), []),
+        [RepLayoutCmdType.PropertyFloat] = (nameof(NetBitReader.SerializePropertyFloat), []),
+        [RepLayoutCmdType.PropertyDouble] = (nameof(NetBitReader.SerializePropertyDouble), []),
+        [RepLayoutCmdType.PropertyNativeBool] = (nameof(NetBitReader.SerializePropertyNativeBool), []),
+        [RepLayoutCmdType.PropertyNetId] = (nameof(NetBitReader.SerializePropertyNetId), []),
+        [RepLayoutCmdType.PropertyObject] = (nameof(NetBitReader.SerializePropertyObject), []),
+        [RepLayoutCmdType.PropertyRotator] = (nameof(NetBitReader.SerializePropertyRotator), []),
+        [RepLayoutCmdType.PropertyString] = (nameof(NetBitReader.SerializePropertyString), []),
+        [RepLayoutCmdType.PropertyVector10] = (nameof(NetBitReader.SerializePropertyVector10), []),
+        [RepLayoutCmdType.PropertyVector100] = (nameof(NetBitReader.SerializePropertyVector100), []),
+        [RepLayoutCmdType.PropertyVectorNormal] = (nameof(NetBitReader.SerializePropertyVectorNormal), []),
+        [RepLayoutCmdType.PropertyVectorQ] = (nameof(NetBitReader.SerializePropertyQuantizedVector), [VectorQuantization.RoundWholeNumber]),
+        [RepLayoutCmdType.Enum] = (nameof(NetBitReader.SerializePropertyEnum), []),
+        [RepLayoutCmdType.PropertyByte] = (nameof(NetBitReader.ReadByte), []),
+        [RepLayoutCmdType.PropertyInt] = (nameof(NetBitReader.ReadInt32), []),
+        [RepLayoutCmdType.PropertyInt16] = (nameof(NetBitReader.ReadInt16), []),
+        [RepLayoutCmdType.PropertyUInt64] = (nameof(NetBitReader.ReadUInt64), []),
+        [RepLayoutCmdType.PropertyUInt16] = (nameof(NetBitReader.ReadUInt16), []),
+        [RepLayoutCmdType.PropertyUInt32] = (nameof(NetBitReader.ReadUInt32), []),
+        [RepLayoutCmdType.PropertyVector] = (nameof(NetBitReader.SerializePropertyVector), []),
+        [RepLayoutCmdType.PropertyVector2D] = (nameof(NetBitReader.SerializePropertyVector2D), []),
+    };
+
+    /// <summary>
+    /// Compiles <c>(group, reader) =&gt; { var value = reader.ReadX(); if (reader.IsError || value is null) return false; group.field = value; return true; }</c>
+    /// for a plain value. The general path reads the value as <see cref="object"/> (a value type gets boxed), finds the read
+    /// method in a <c>switch</c> and stores it through a setter that unboxes it again; this does the same without boxing.
+    /// <c>null</c> if the command type has no plain read method or the value does not fit the property.
+    /// </summary>
+    // Compiled code depends only on the property and its command type, so it is shared by all parsers (every replay creates
+    // its own parser; compiling the same delegates again for every replay cost more than it saved).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(PropertyInfo, RepLayoutCmdType), Func<INetFieldExportGroup, NetBitReader, bool>?> TypedReads = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(PropertyInfo, object?), Action<INetFieldExportGroup>> TypedResets = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<PropertyInfo, Action<INetFieldExportGroup, object>> Setters = new();
+
+    private static Func<INetFieldExportGroup, NetBitReader, bool>? BuildTypedRead(NetFieldInfo info) =>
+        info.ElementTypeId is not null ? null : TypedReads.GetOrAdd((info.PropertyInfo, info.Attribute.Type), _ => CompileTypedRead(info));
+
+    private static Func<INetFieldExportGroup, NetBitReader, bool>? CompileTypedRead(NetFieldInfo info)
+    {
+        if (info.ElementTypeId is not null || !TypedReadMethods.TryGetValue(info.Attribute.Type, out var read) || BackingField(info.PropertyInfo) is not { } field)
+        {
+            return null;
+        }
+
+        try
+        {
+            var method = typeof(NetBitReader).GetMethod(read.Method, [.. read.Arguments.Select(a => a.GetType())]);
+            if (method is null)
+            {
+                return null;
+            }
+
+            var group = Expression.Parameter(typeof(INetFieldExportGroup), "group");
+            var reader = Expression.Parameter(typeof(NetBitReader), "reader");
+            var value = Expression.Variable(method.ReturnType, "value");
+            var done = Expression.Label(typeof(bool));
+
+            // Like the general path: a failed read or a null value leaves the property as it is.
+            Expression failed = Expression.Property(reader, nameof(NetBitReader.IsError));
+            if (!method.ReturnType.IsValueType)
+            {
+                failed = Expression.OrElse(failed, Expression.Equal(value, Expression.Constant(null, method.ReturnType)));
+            }
+
+            var body = Expression.Block(
+                [value],
+                Expression.Assign(value, Expression.Call(reader, method, read.Arguments.Select(a => (Expression)Expression.Constant(a)))),
+                Expression.IfThen(failed, Expression.Return(done, Expression.Constant(false))),
+                Expression.Assign(Expression.Field(Expression.Convert(group, field.DeclaringType!), field), Expression.Convert(value, field.FieldType)),
+                Expression.Label(done, Expression.Constant(true)));
+
+            return Expression.Lambda<Func<INetFieldExportGroup, NetBitReader, bool>>(body, group, reader).Compile();
+        }
+        catch (InvalidOperationException)
+        {
+            // The read type cannot be converted to the property type: keep the general path (and its behavior).
+            return null;
+        }
+    }
+
+    /// <summary>Compiles <c>group =&gt; group.field = DefaultValue</c> (no boxing), or falls back to the general setter.</summary>
+    private static Action<INetFieldExportGroup> BuildTypedReset(NetFieldInfo info) =>
+        TypedResets.GetOrAdd((info.PropertyInfo, info.DefaultValue), _ => CompileTypedReset(info));
+
+    private static Action<INetFieldExportGroup> CompileTypedReset(NetFieldInfo info)
+    {
+        if (BackingField(info.PropertyInfo) is { } field)
+        {
+            var group = Expression.Parameter(typeof(INetFieldExportGroup), "group");
+            var reset = Expression.Assign(Expression.Field(Expression.Convert(group, field.DeclaringType!), field), Expression.Constant(info.DefaultValue, field.FieldType));
+            return Expression.Lambda<Action<INetFieldExportGroup>>(reset, group).Compile();
+        }
+
+        info.SetMethod ??= CreateSetter(info.PropertyInfo);
+        return instance => info.SetMethod(instance, info.DefaultValue);
+    }
+
+    private static FieldInfo? BackingField(PropertyInfo property) =>
+        property.DeclaringType?.GetField($"<{property.Name}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    private static Action<INetFieldExportGroup, object> CreateSetter(PropertyInfo propertyInfo) => Setters.GetOrAdd(propertyInfo, CompileSetter);
+
+    private static Action<INetFieldExportGroup, object> CompileSetter(PropertyInfo propertyInfo)
     {
         var field = GetBackingField(propertyInfo);
 
@@ -225,8 +343,15 @@ public class NetFieldParser
 
     private void AddNetFieldInfo(Type type, NetFieldGroupInfo info, ParseMode mode)
     {
+        IReadOnlySet<string>? only = _onlyProperties?.GetValueOrDefault(type);
         foreach (var property in type.GetProperties())
         {
+            // Not wanted: the export finds no property, so ReceiveProperties skips its bits from then on.
+            if (only is not null && !only.Contains(property.Name))
+            {
+                continue;
+            }
+
             // A property can be exported under several names (the same data has a different name in different groups or versions).
             var allExportAttributes = property.GetCustomAttributes<NetFieldExportAttribute>().ToList();
             var netFieldExportAttributes = allExportAttributes
@@ -424,6 +549,22 @@ public class NetFieldParser
 
     private void SetType(INetFieldExportGroup obj, NetFieldInfo netFieldInfo, NetFieldGroupInfo groupInfo, NetFieldExportGroup exportGroup, NetBitReader netBitReader, bool singleInstance)
     {
+        if (!netFieldInfo.TypedReadBuilt)
+        {
+            netFieldInfo.TypedRead = BuildTypedRead(netFieldInfo);
+            netFieldInfo.TypedReadBuilt = true;
+        }
+
+        if (netFieldInfo.TypedRead is { } typedRead)
+        {
+            if (typedRead(obj, netBitReader) && singleInstance)
+            {
+                _objects[groupInfo.TypeId].ChangedProperties.Add(netFieldInfo);
+            }
+
+            return;
+        }
+
         var data = netFieldInfo.Attribute.Type switch
         {
             RepLayoutCmdType.DynamicArray => ReadArrayField(exportGroup, netFieldInfo, groupInfo, netBitReader),
@@ -432,11 +573,7 @@ public class NetFieldParser
                 rotationQuantizationLevel: netFieldInfo.MovementAttribute.RotationQuantizationLevel,
                 velocityQuantizationLevel: netFieldInfo.MovementAttribute.VelocityQuantizationLevel)
                 // TODO: support custom FEngineNetworkCustomVersion::Guid
-                : netBitReader.SerializeRepMovement(
-                    rotationQuantizationLevel: (netBitReader.NetworkReplayVersion != null
-                        && (netBitReader.NetworkReplayVersion.Changelist >= 54618515u
-                            || (netBitReader.NetworkReplayVersion.Branch?.Contains("+Release-41.") ?? false)))
-                        ? RotatorQuantization.ShortComponents : RotatorQuantization.ByteComponents),
+                : netBitReader.SerializeRepMovement(rotationQuantizationLevel: RepMovementRotation(netBitReader.NetworkReplayVersion)),
             _ => ReadDataType(netFieldInfo.Attribute.Type, netBitReader, netFieldInfo.PropertyInfo.PropertyType),
         };
 
@@ -454,6 +591,26 @@ public class NetFieldParser
 
             netFieldInfo.SetMethod(obj, data);
         }
+    }
+
+    private NetworkReplayVersion? _repMovementVersion;
+    private RotatorQuantization _repMovementRotation;
+
+    /// <summary>
+    /// Rotation format of a replicated movement for the replay version. The version is the same for a whole replay, so the
+    /// answer (a string search in the branch name) is computed once instead of for every movement update.
+    /// </summary>
+    private RotatorQuantization RepMovementRotation(NetworkReplayVersion? version)
+    {
+        if (!ReferenceEquals(version, _repMovementVersion) || version is null)
+        {
+            _repMovementVersion = version;
+            _repMovementRotation = version != null && (version.Changelist >= 54618515u || (version.Branch?.Contains("+Release-41.") ?? false))
+                ? RotatorQuantization.ShortComponents
+                : RotatorQuantization.ByteComponents;
+        }
+
+        return _repMovementRotation;
     }
 
     private object? ReadDataType(RepLayoutCmdType replayout, NetBitReader netBitReader, Type objectType)
@@ -683,12 +840,44 @@ public class NetFieldParser
             return null;
         }
 
+        return ResetInstance(exportGroup);
+    }
+
+    /// <summary>
+    /// Same as <see cref="CreateType(string)"/>, but finds the group by the index cached in <paramref name="group"/> instead of
+    /// looking up its path (a string hash of the long path for every property update).
+    /// </summary>
+    public INetFieldExportGroup? CreateType(NetFieldExportGroup group)
+    {
+        int index = GroupIndex(group);
+        return index < 0 ? null : ResetInstance(NetFieldGroups[index]);
+    }
+
+    /// <summary>Same as <see cref="WillReadType(string)"/> with the index cached in <paramref name="group"/>.</summary>
+    public bool WillReadType(NetFieldExportGroup group) => GroupIndex(group) >= 0;
+
+    /// <summary>Index of the group in <see cref="NetFieldGroups"/>, looked up once per group and kept in it; -2 if it is not read.</summary>
+    private int GroupIndex(NetFieldExportGroup group)
+    {
+        if (group.GroupId == -1)
+        {
+            group.GroupId = NetFieldGroups.TryGetIndex(group.PathName, out var index) ||
+                (TryAddPrefixAlias(group.PathName) && NetFieldGroups.TryGetIndex(group.PathName, out index))
+                ? index
+                : -2;
+        }
+
+        return group.GroupId;
+    }
+
+    private INetFieldExportGroup ResetInstance(NetFieldGroupInfo exportGroup)
+    {
         var cachedEntry = _objects[exportGroup.TypeId];
 
         for (var i = 0; i < cachedEntry.ChangedProperties.Count; i++)
         {
             var fieldInfo = cachedEntry.ChangedProperties[i];
-            fieldInfo.SetMethod(cachedEntry.Instance, fieldInfo.DefaultValue);
+            (fieldInfo.TypedReset ??= BuildTypedReset(fieldInfo))(cachedEntry.Instance);
         }
 
         cachedEntry.ChangedProperties.Clear();
@@ -728,6 +917,13 @@ public class NetFieldParser
         public int? ElementTypeId { get; set; }
         public object DefaultValue { get; set; }
         public Action<INetFieldExportGroup, object> SetMethod { get; set; }
+
+        /// <summary>Reads the value with its typed read method and stores it, see <see cref="BuildTypedRead"/>. <c>null</c>: use the general path.</summary>
+        public Func<INetFieldExportGroup, NetBitReader, bool>? TypedRead { get; set; }
+        public bool TypedReadBuilt { get; set; }
+
+        /// <summary>Puts <see cref="DefaultValue"/> back without boxing, see <see cref="BuildTypedReset"/>.</summary>
+        public Action<INetFieldExportGroup>? TypedReset { get; set; }
     }
 
     // TODO make private

@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Unreal.Core.Contracts;
 using Unreal.Core.Exceptions;
@@ -98,13 +98,19 @@ public abstract class ReplayReader<T> where T : Replay, new()
     }
 
     /// <param name="ignoredExportGroups">Export group types that are skipped while parsing, see <see cref="NetFieldParser"/>.</param>
-    public ReplayReader(ILogger logger, ParseMode mode, IReadOnlySet<Type>? ignoredExportGroups)
+    public ReplayReader(ILogger logger, ParseMode mode, IReadOnlySet<Type>? ignoredExportGroups) : this(logger, mode, ignoredExportGroups, null)
+    {
+    }
+
+    /// <param name="ignoredExportGroups">Export group types that are skipped while parsing, see <see cref="NetFieldParser"/>.</param>
+    /// <param name="onlyProperties">Per export group type the only properties that are read, see <see cref="NetFieldParser"/>.</param>
+    public ReplayReader(ILogger logger, ParseMode mode, IReadOnlySet<Type>? ignoredExportGroups, IReadOnlyDictionary<Type, IReadOnlySet<string>>? onlyProperties)
     {
         _logger = logger;
         _parseMode = mode;
 
         _netGuidCache = new NetGuidCache();
-        _netFieldParser = new NetFieldParser(_netGuidCache, mode, ignoredTypes: ignoredExportGroups);
+        _netFieldParser = new NetFieldParser(_netGuidCache, mode, ignoredTypes: ignoredExportGroups, onlyProperties: onlyProperties);
     }
 
     /// <summary>
@@ -642,7 +648,8 @@ public abstract class ReplayReader<T> where T : Replay, new()
 
             _netGuidCache.ExternalData[netGuid] = new ExternalData()
             {
-                Archive = new BinaryReader(archive.ReadMemory((externalDataNumBits + 7) >> 3))
+                // Copied: the data is only read with the actor's next bunch, maybe in a later block, and the buffer of a block is reused.
+                Archive = new BinaryReader(archive.ReadMemory((externalDataNumBits + 7) >> 3).ToArray().AsMemory())
                 {
                     NetworkReplayVersion = archive.NetworkReplayVersion,
                     EngineNetworkVersion = archive.EngineNetworkVersion,
@@ -1450,7 +1457,7 @@ public abstract class ReplayReader<T> where T : Replay, new()
                         else
                         {
                             var group = _netGuidCache.GetNetFieldExportGroup(classNetProperty.PathName);
-                            if (group is null || !_netFieldParser.WillReadType(group.PathName))
+                            if (group is null || !_netFieldParser.WillReadType(group))
                             {
                                 continue;
                             }
@@ -1528,7 +1535,7 @@ public abstract class ReplayReader<T> where T : Replay, new()
             return false;
         }
 
-        if (!Channels[channelIndex]!.IsIgnoringGroup(netFieldExportGroup.PathName) && _netFieldParser.WillReadType(netFieldExportGroup.PathName) && !reader.AtEnd())
+        if (!Channels[channelIndex]!.IsIgnoringGroup(netFieldExportGroup.PathName) && _netFieldParser.WillReadType(netFieldExportGroup) && !reader.AtEnd())
         {
             _logger?.LogWarning("ReceivedRPC: ReceivePropertiesForRPC - Mismatch read. (bunch: {})", bunchIndex);
             return false;
@@ -1679,7 +1686,7 @@ public abstract class ReplayReader<T> where T : Replay, new()
             return false;
         }
 
-        if (!_netFieldParser.WillReadType(group.PathName))
+        if (!_netFieldParser.WillReadType(group))
         {
             _logger?.LogInformation("Not reading type {}", group.PathName);
             Channels[channelIndex]!.IgnoreGroup(group.PathName);
@@ -1706,7 +1713,7 @@ public abstract class ReplayReader<T> where T : Replay, new()
         }
 
         _logger?.LogDebug("ReceiveProperties: group {}", group.PathName);
-        exportGroup = _netFieldParser.CreateType(group.PathName);
+        exportGroup = _netFieldParser.CreateType(group);
 
         if (exportGroup is null)
         {

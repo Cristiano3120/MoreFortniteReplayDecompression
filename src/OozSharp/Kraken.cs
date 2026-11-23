@@ -33,14 +33,25 @@ public unsafe class Kraken
     /// <returns>Decompressed byte[]</returns>
     public ReadOnlyMemory<byte> Decompress(ReadOnlySpan<byte> compressedInput, int uncompressedSize)
     {
+        var decompressedBuffer = new byte[uncompressedSize];
+        Decompress(compressedInput, decompressedBuffer);
+        return decompressedBuffer;
+    }
+
+    /// <summary>
+    /// Decompresses into <paramref name="destination"/>, which must be exactly the uncompressed size. Lets the caller reuse one
+    /// buffer for many blocks instead of allocating a new array per block.
+    /// </summary>
+    public void Decompress(ReadOnlySpan<byte> compressedInput, Span<byte> destination)
+    {
         using var decoder = new KrakenDecoder();
 
-        var decompressedBuffer = new byte[uncompressedSize];
+        var uncompressedSize = destination.Length;
         var remainingBytes = uncompressedSize;
         var sourceLength = compressedInput.Length;
         var destinationOffset = 0;
 
-        fixed (byte* decompressedBufferPtr = decompressedBuffer)
+        fixed (byte* decompressedBufferPtr = destination)
         fixed (byte* compressedInputPtr = compressedInput)
         fixed (byte* scratchPtr = decoder.Scratch)
         {
@@ -61,8 +72,6 @@ public unsafe class Kraken
                 remainingBytes -= decoder.DestinationUsed;
             }
         }
-
-        return decompressedBuffer;
     }
 
     private bool DecodeStep(KrakenDecoder decoder, byte* destination, int destinationOffset, int remainingDestinationBytes, byte* source, int sourceBytesleft, byte* scratch)

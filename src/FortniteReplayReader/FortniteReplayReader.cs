@@ -36,6 +36,13 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
     {
     }
 
+    /// <param name="ignoredExportGroups">Export group types (for example <c>typeof(HealthSet)</c>) that are skipped while parsing.</param>
+    /// <param name="onlyProperties">Per export group type the only properties that are read; the others are skipped without decoding.</param>
+    public ReplayReader(ILogger logger, ParseMode parseMode, IReadOnlySet<Type>? ignoredExportGroups, IReadOnlyDictionary<Type, IReadOnlySet<string>>? onlyProperties)
+        : base(logger, parseMode, ignoredExportGroups, onlyProperties)
+    {
+    }
+
     public FortniteReplay ReadReplay(string fileName)
     {
         var bytes = File.ReadAllBytes(fileName);
@@ -347,6 +354,34 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
         };
     }
 
+    // One buffer each for the decrypted and the decompressed bytes of a block, reused for every block of the replay instead of a
+    // new array per block (a block is up to a few MB, so every new array went to the large object heap and needed a full GC).
+    // Safe because a block is completely processed before the next one is read; data that outlives its block (external data)
+    // is copied by ReadExternalData.
+    private byte[]? _decryptBuffer;
+    private byte[]? _decompressBuffer;
+    private Aes? _aes;
+    private ReadOnlyMemory<byte> _aesKey;
+
+    private Aes CreateAes(ReadOnlyMemory<byte> key)
+    {
+        _aesKey = key;
+        var aes = Aes.Create();
+        aes.Key = key.ToArray();
+        return aes;
+    }
+
+    /// <summary>The buffer with at least <paramref name="size"/> bytes, grown when needed.</summary>
+    private static Span<byte> Rent(ref byte[]? buffer, int size)
+    {
+        if (buffer is null || buffer.Length < size)
+        {
+            buffer = new byte[Math.Max(size, (buffer?.Length ?? 0) * 2)];
+        }
+
+        return buffer;
+    }
+
     protected override FArchive DecryptBuffer(FArchive archive, int size)
     {
         if (!Replay.Info.IsEncrypted)
@@ -360,14 +395,18 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
             };
         }
 
-        var key = Replay.Info.EncryptionKey;
         var encryptedBytes = archive.ReadMemory(size);
 
-        using var aes = Aes.Create();
-        aes.Key = key.ToArray();
-        var decryptedArray = aes.DecryptEcb(encryptedBytes.Span, PaddingMode.PKCS7);
+        // A reused reader (MetadataReader) reads many replays, each with its own key.
+        if (_aes is null || !_aesKey.Span.SequenceEqual(Replay.Info.EncryptionKey.Span))
+        {
+            _aes?.Dispose();
+            _aes = CreateAes(Replay.Info.EncryptionKey);
+        }
+        var decrypted = Rent(ref _decryptBuffer, size);
+        int decryptedSize = _aes.DecryptEcb(encryptedBytes.Span, decrypted, PaddingMode.PKCS7);
 
-        return new Unreal.Core.BinaryReader(decryptedArray.AsMemory())
+        return new Unreal.Core.BinaryReader(_decryptBuffer.AsMemory(0, decryptedSize))
         {
             EngineNetworkVersion = archive.EngineNetworkVersion,
             NetworkVersion = archive.NetworkVersion,
@@ -388,9 +427,9 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
         var compressedBuffer = archive.ReadBytes(compressedSize);
 
         _logger?.LogDebug("Decompressed archive from {compressedSize} to {decompressedSize}.", compressedSize, decompressedSize);
-        var output = Oodle.DecompressReplayData(compressedBuffer, decompressedSize);
+        Oodle.DecompressReplayData(compressedBuffer, Rent(ref _decompressBuffer, decompressedSize)[..decompressedSize]);
 
-        return new Unreal.Core.BinaryReader(output)
+        return new Unreal.Core.BinaryReader(_decompressBuffer.AsMemory(0, decompressedSize))
         {
             EngineNetworkVersion = archive.EngineNetworkVersion,
             NetworkVersion = archive.NetworkVersion,

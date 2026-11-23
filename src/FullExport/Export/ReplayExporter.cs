@@ -16,11 +16,7 @@ public static class ReplayExporter
     /// </param>
     public static ReplayExport Read(string path, float positionInterval = 1f, bool collectTimeline = true)
     {
-        return Read(path, new ExportSettings
-        {
-            PositionInterval = positionInterval,
-            CollectTimeline = collectTimeline,
-        });
+        return Read(path, ExportSettings.AllStats(collectTimeline, positionInterval));
     }
 
     /// <param name="path">Path to the .replay file.</param>

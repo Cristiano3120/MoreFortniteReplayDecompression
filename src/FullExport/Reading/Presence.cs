@@ -12,12 +12,13 @@ namespace MoreFortniteReplayDecompression.Reading;
 /// </summary>
 internal static class Presence
 {
-    private static readonly ConcurrentDictionary<(Type, bool), Func<object, bool>> Cache = new();
+    // Keyed by the exclude set itself (reference), so different sets get different checks. The sets are static readonly fields.
+    private static readonly ConcurrentDictionary<(Type, HashSet<string>?), Func<object, bool>> Cache = new();
     private static readonly MethodInfo ObjectEquals = typeof(object).GetMethod(nameof(Equals), [typeof(object)])!;
 
     public static bool Any(INetFieldExportGroup group, HashSet<string>? exclude)
     {
-        (Type, bool) key = (group.GetType(), exclude is not null);
+        (Type, HashSet<string>?) key = (group.GetType(), exclude);
         if (!Cache.TryGetValue(key, out Func<object, bool>? check))
         {
             // Two threads may build the same check at the same time; both are equal, so it does not matter which one is kept.

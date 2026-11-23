@@ -16,4 +16,7 @@ public static class Oodle
     /// <param name="uncompressedSize"></param>
     /// <returns>byte[]</returns>
     public static ReadOnlyMemory<byte> DecompressReplayData(ReadOnlySpan<byte> buffer, int uncompressedSize) => kraken.Decompress(buffer, uncompressedSize);
+
+    /// <summary>Decompresses into <paramref name="destination"/> (exactly the uncompressed size), so the caller can reuse the buffer.</summary>
+    public static void DecompressReplayData(ReadOnlySpan<byte> buffer, Span<byte> destination) => kraken.Decompress(buffer, destination);
 }
