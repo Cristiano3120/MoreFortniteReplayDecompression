@@ -5,8 +5,9 @@ public sealed class ParallelReadOptions
 {
     /// <summary>
     /// How many replays are read at the same time. Default: the number of logical CPU cores.
-    /// Every replay that is read at the same time is in memory at the same time (a server replay with a timeline can need
-    /// more than 1 GB), so lower this if the memory runs out. Half of the cores was only ~20 % slower and needed ~15 % less memory.
+    /// Every replay that is read at the same time needs its own working memory (a server replay with a timeline up to 1.4 GB,
+    /// with <see cref="ExportSettings.StatsOnly"/> much less), so lower this if the memory runs out. 40 replays on 16 cores:
+    /// half of the cores was just as fast (15 s) and needed about half the memory (0.4 to 0.5 GB instead of 0.8 GB).
     /// </summary>
     public int MaxParallelReplays { get; init; } = Environment.ProcessorCount;
 
@@ -48,11 +49,12 @@ public sealed class ParallelReadOptions
     /// <list type="bullet">
     /// <item>
     /// <c>true</c> (default): all read replays stay in memory until <c>ReadMany</c> returns, and the returned results contain them
-    /// (<see cref="ReplayReadResult.Export"/>). Convenient, but 40 replays needed 7.7 GB.
+    /// (<see cref="ReplayReadResult.Export"/>). Convenient, but every result needs memory until the end
+    /// (40 replays with <see cref="ExportSettings.StatsOnly"/>: 1.0 GB at the peak).
     /// </item>
     /// <item>
     /// <c>false</c>: every replay is only passed to <see cref="OnReplayRead"/> and dropped right after it, so only the replays that
-    /// are currently being read are in memory (40 replays: 3.3 GB). In the returned results <see cref="ReplayReadResult.Export"/>
+    /// are currently being read are in memory (40 replays: 0.8 GB at the peak). In the returned results <see cref="ReplayReadResult.Export"/>
     /// is <c>null</c>; they still have the path, the error and the duration. Use this for many or large replays and take what you
     /// need in <see cref="OnReplayRead"/>.
     /// </item>

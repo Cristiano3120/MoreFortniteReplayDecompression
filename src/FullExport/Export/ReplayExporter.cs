@@ -43,7 +43,15 @@ public static class ReplayExporter
         }
 
         FullExportReader reader = new(settings);
-        FortniteReplay replay = reader.ReadReplay(path);
+
+        // Mapped instead of loaded: the file does not count as memory of the process and is never copied.
+        // Nothing in the result points into the file (keys and decrypted data are copies), so it can be closed right after reading.
+        FortniteReplay replay;
+        using (MappedFileMemory file = new(path))
+        {
+            replay = reader.ReadReplay(file.Memory);
+        }
+
         List<PlayerStats> players = reader.BuildPlayers(replay);
         
         return new ReplayExport
@@ -74,7 +82,8 @@ public static class ReplayExporter
     /// <para>
     /// Tip: switch on the server garbage collector in the project of your program
     /// (<c>&lt;ServerGarbageCollection&gt;true&lt;/ServerGarbageCollection&gt;</c> in the .csproj). Reading in parallel creates a lot of
-    /// garbage on many threads; with the server garbage collector 40 replays took 12 s instead of 22 s on 16 cores.
+    /// garbage on many threads; with the server garbage collector 40 replays took 11 s instead of 15 s on 16 cores
+    /// (and needed about 0.1 GB more memory).
     /// A library cannot switch it on for the program.
     /// </para>
     /// </summary>

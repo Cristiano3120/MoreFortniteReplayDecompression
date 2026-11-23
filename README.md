@@ -189,13 +189,13 @@ foreach (ReplayReadResult result in results)
 }
 ```
 
-By default all read replays stay in memory until `ReadMany` returns (40 replays: 7.7 GB). For many or large replays, take what you
+By default all read replays stay in memory until `ReadMany` returns (40 replays: 1.0 GB at the peak). For many or large replays, take what you
 need from each replay as soon as it is read and let it go:
 
 - `OnReplayRead` is your own function. `ReadMany` calls it once for every replay, right after that replay is read, also for
   replays that failed. It is called from several threads at once, so use `lock` when you add up values.
 - `KeepResults = false` drops every replay after `OnReplayRead`, so only the replays that are currently being read are in memory
-  (40 replays: 3.3 GB). The returned list then only has the path, the error and the duration of each replay.
+  (40 replays: 0.8 GB at the peak). The returned list then only has the path, the error and the duration of each replay.
 
 ```csharp
 double damage = 0;
@@ -221,8 +221,8 @@ ReplayExporter.ReadMany(paths, options: new ParallelReadOptions
 | `ContinueOnError` | `true` | `false`: the first error stops the reading and is thrown |
 | `CancellationToken` | none | stop starting new replays (replays already being read are finished) |
 
-Switch on the server garbage collector in your program's .csproj, it makes parallel reading about twice as fast
-(40 replays on 16 cores: 12 s instead of 22 s; one after another they take 61 s):
+Switch on the server garbage collector in your program's .csproj, it makes parallel reading about a quarter faster
+(40 replays on 16 cores: 11 s instead of 15 s; one after another they take 56 s):
 
 ```xml
 <ServerGarbageCollection>true</ServerGarbageCollection>
