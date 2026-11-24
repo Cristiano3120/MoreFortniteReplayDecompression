@@ -36,7 +36,7 @@ public sealed partial class PlayerStats
     internal List<(float T, float Amount)> RawHealthLoss { get; } = [];
     internal List<(float T, bool Downed)> RawDownedChanges { get; } = [];
     internal List<WeaponChange> RawWeaponChanges { get; } = [];
-    internal List<(float T, string Weapon)> RawShots { get; } = [];
+    internal List<(float T, string Weapon, string? Item)> RawShots { get; } = [];
     internal List<BuildEvent> RawBuilds { get; } = [];
     internal List<EliminationEvent> RawEliminations { get; } = [];
     internal List<EliminationEvent> RawDeaths { get; } = [];

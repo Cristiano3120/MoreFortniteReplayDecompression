@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Reflection;
 using System.Text;
 using MoreFortniteReplayDecompression.Export;
@@ -139,6 +139,30 @@ public class RealReplayTest
         Assert.Equal(Values(stats), Values(hitsOnly));
         Assert.Contains(hitsOnly.Players, p => p.DamageDealt > 0);
         Assert.All(hitsOnly.Players, p => Assert.Empty(p.Positions));
+    }
+
+    [Fact]
+    public void WeaponItemsSplitTheWeapons()
+    {
+        ReplayExport export = ReplayExporter.Read(Replays()[0], ExportSettings.StatsOnly);
+        List<PlayerStats> shooters = [.. export.Players.Where(p => p.WeaponShots.Count > 0)];
+
+        Assert.NotEmpty(shooters);
+        Assert.All(shooters, p => Assert.All(p.WeaponShots, w =>
+        {
+            // Every item belongs to its weapon class and adds up to at most the totals of the class
+            Assert.True(w.Items.Sum(i => i.ShotsFired) <= w.ShotsFired);
+            Assert.True(w.Items.Sum(i => i.Hits) <= w.Hits);
+            Assert.All(w.Items, i => Assert.StartsWith("WID_", i.Item));
+        }));
+        Assert.Contains(shooters, p => p.WeaponShots.Any(w => w.Items.Any(i => i.Rarity is not null)));
+        Assert.Contains(shooters, p => p.DamageDealtEvents.Any(h => h.WeaponItem is not null && h.WeaponRarity is not null));
+
+        // Switched off: no items, everything else the same
+        ReplayExport without = ReplayExporter.Read(Replays()[0], ExportSettings.StatsOnly with { TrackWeaponItems = false });
+        Assert.All(without.Players, p => Assert.All(p.DamageDealtEvents, h => Assert.Null(h.WeaponItem)));
+        Assert.All(without.Players, p => Assert.All(p.WeaponShots, w => Assert.Empty(w.Items)));
+        Assert.Equal(Snapshot(export), Snapshot(without));
     }
 
     [Fact]

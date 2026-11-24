@@ -85,6 +85,27 @@ foreach (WeaponShots weapon in player.WeaponShots)
 }
 ```
 
+Every weapon also has its exact item with rarity (`WID_Shotgun_Break_Flintlock_Athena_SR` = legendary), so you can split by rarity:
+
+```csharp
+foreach (WeaponShots weapon in player.WeaponShots)
+{
+    foreach (WeaponItemShots item in weapon.Items)
+    {
+        Console.WriteLine($"{item.Item} ({item.Rarity}): {item.ShotsFired} shots, {item.Hits} hits ({item.Accuracy:P1})");
+    }
+}
+
+// Damage per item, from the single hits
+foreach (var group in player.DamageDealtEvents.GroupBy(h => h.WeaponItem))
+{
+    Console.WriteLine($"{group.Key}: {group.Sum(h => h.Amount):F0} damage");
+}
+```
+
+The replay has no display names like "Pump Shotgun", only these ids. `ItemIds.BaseId(item)` removes the rarity
+(`WID_Shotgun_Break_Flintlock_Athena`), which makes it a good key for your own table of display names.
+
 One shot is one bullet, shell or projectile: a shotgun shot counts once. Epic's own accuracy (`player.EpicAccuracy`, only for the
 player who recorded the replay) counts every shotgun pellet instead, so the two values differ when shotguns were used.
 
@@ -342,6 +363,7 @@ ExportSettings settings = ExportSettings.StatsOnly with { TrackBuilds = false };
 | `TrackPositions` | positions, distance traveled, time in storm, supply drop distances |
 | `TrackMovementDetails` | speed, rotation and states for every stored position (off in `StatsOnly` and `Full` too) |
 | `TrackWeapons` | weapons each player held |
+| `TrackWeaponItems` | exact item and rarity of the weapons (`HitEvent.WeaponItem`, `WeaponShots.Items`) |
 | `TrackBuilds` | built pieces and materials used |
 | `TrackGameplayCues` | gameplay cues (effects like healing or sliding) in the timeline |
 | `CollectTimeline` | the full timeline of every update (biggest cost) |

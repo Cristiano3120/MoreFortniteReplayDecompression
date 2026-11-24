@@ -68,6 +68,16 @@ public sealed class HitEvent
     public string? Weapon { get; init; }
 
     /// <summary>
+    /// Item id of the weapon, including its rarity, for example <c>WID_Shotgun_Break_Flintlock_Athena_SR</c>, if known.
+    /// <see cref="Weapon"/> is the same for every rarity, this is the exact item. Use <see cref="ItemIds.BaseId"/> as the key for
+    /// display names (the replay has no display names). Needs <see cref="Export.ExportSettings.TrackWeaponItems"/>.
+    /// </summary>
+    public string? WeaponItem { get; init; }
+
+    /// <summary>Rarity of the weapon from <see cref="WeaponItem"/>, <c>null</c> if unknown or the item has no rarity.</summary>
+    public ItemRarity? WeaponRarity => ItemIds.RarityOf(WeaponItem);
+
+    /// <summary>
     /// The hit comes from a projectile weapon: a weapon that shoots a real projectile which flies to the target, such as the
     /// slingshot or a launcher, instead of hitting instantly like a rifle or a shotgun.
     /// The replay reports these hits differently (as gameplay cues on the victim instead of <c>BatchedDamageCues</c>),

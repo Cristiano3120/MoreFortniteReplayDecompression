@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using MoreFortniteReplayDecompression.Players;
 using MoreFortniteReplayDecompression.StronglyTypedIds;
@@ -25,11 +25,17 @@ public sealed partial class FullExportReader
     // The names of a group's fields arrive bit by bit during the replay. Both caches are only cleared when one of the three
     // field names below arrives (rare), not on every new field name: clearing them on every new name cost ~20 % read time.
 
-    /// <summary>Handles of the fields a shot is read from, per export group that has an <c>AmmoCount</c>.</summary>
-    private readonly Dictionary<NetFieldExportGroup, ShotFields> _shotFields = new();
+    /// <summary>Handles of the weapon fields (shots and item), per export group that has an <c>AmmoCount</c> or a <c>WeaponData</c>.</summary>
+    private readonly Dictionary<NetFieldExportGroup, WeaponFields> _weaponFields = new();
 
-    /// <summary>Groups that are known to have no <c>AmmoCount</c>.</summary>
-    private readonly HashSet<NetFieldExportGroup> _noShotFields = new();
+    /// <summary>Groups that are known to have neither an <c>AmmoCount</c> nor a <c>WeaponData</c>.</summary>
+    private readonly HashSet<NetFieldExportGroup> _noWeaponFields = new();
+
+    /// <summary>Weapon actor GUID -> NetGUID of its item definition (<c>WeaponData</c>), resolved in <see cref="Cleanup"/>.</summary>
+    private readonly Dictionary<ChannelGuid, uint> _weaponItemGuid = new();
+
+    /// <summary>Weapon actor GUID -> item id (<c>WID_Shotgun_Break_Flintlock_Athena_SR</c>).</summary>
+    private readonly Dictionary<ChannelGuid, string> _weaponItem = new();
 
     /// <summary>Everything read from one weapon actor, keyed by its actor GUID.</summary>
     private readonly Dictionary<ChannelGuid, WeaponFire> _weaponFire = new();
@@ -43,7 +49,7 @@ public sealed partial class FullExportReader
         @"^B_(Assault|Shotgun|Pistol|SMG|Sniper|Launcher|DMR|Minigun|LMG|Rifle|Bow|Crossbow|Revolver)_|Slingshot|Dualies|_DMR_|Sniper|Launcher|Crossbow",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private sealed record ShotFields(uint? AmmoCount, uint? LastFireTime, uint? Instigator);
+    private sealed record WeaponFields(uint? AmmoCount, uint? LastFireTime, uint? Instigator, uint? WeaponData);
 
     private sealed class WeaponFire
     {
@@ -63,28 +69,28 @@ public sealed partial class FullExportReader
     public override bool ReceiveProperties(FBitArchive archive, NetFieldExportGroup group, uint channelIndex,
         [NotNullWhen(true)] out INetFieldExportGroup? exportGroup, bool enablePropertyChecksum = true, bool netDeltaUpdate = false)
     {
-        if (_settings.TrackShots && !netDeltaUpdate && TryGetShotFields(group, out ShotFields? fields) &&
+        if ((_settings.TrackShots || _settings.TrackWeaponItems) && !netDeltaUpdate && TryGetWeaponFields(group, out WeaponFields? fields) &&
             _channelGuid.TryGetValue(new ChannelIndex(channelIndex), out ChannelGuid weapon))
         {
-            ReadShotFields(archive, fields, weapon, enablePropertyChecksum);
+            ReadWeaponFields(archive, fields, weapon, enablePropertyChecksum);
         }
 
         return base.ReceiveProperties(archive, group, channelIndex, out exportGroup, enablePropertyChecksum, netDeltaUpdate);
     }
 
-    private bool TryGetShotFields(NetFieldExportGroup group, [NotNullWhen(true)] out ShotFields? fields)
+    private bool TryGetWeaponFields(NetFieldExportGroup group, [NotNullWhen(true)] out WeaponFields? fields)
     {
-        if (_shotFields.TryGetValue(group, out fields))
+        if (_weaponFields.TryGetValue(group, out fields))
         {
             return true;
         }
 
-        if (_noShotFields.Contains(group))
+        if (_noWeaponFields.Contains(group))
         {
             return false;
         }
 
-        uint? ammo = null, fireTime = null, instigator = null;
+        uint? ammo = null, fireTime = null, instigator = null, weaponData = null;
         for (uint handle = 0; handle < group.NetFieldExportsLength; handle++)
         {
             switch (group.NetFieldExports[handle]?.Name)
@@ -92,34 +98,46 @@ public sealed partial class FullExportReader
                 case "AmmoCount": ammo = handle; break;
                 case "LastFireTimeVerified": fireTime = handle; break;
                 case "Instigator": instigator = handle; break;
+                case "WeaponData": weaponData = handle; break;
             }
         }
 
-        if (ammo is null)
+        // Only the fields of switched on features count, so groups without them are skipped right away next time
+        if (!_settings.TrackShots)
         {
-            _noShotFields.Add(group);
+            ammo = fireTime = null;
+        }
+
+        if (!_settings.TrackWeaponItems)
+        {
+            weaponData = null;
+        }
+
+        if (ammo is null && weaponData is null)
+        {
+            _noWeaponFields.Add(group);
             return false;
         }
 
-        fields = new ShotFields(ammo, fireTime, instigator);
-        _shotFields[group] = fields;
+        fields = new WeaponFields(ammo, fireTime, instigator, weaponData);
+        _weaponFields[group] = fields;
         return true;
     }
 
     public override NetFieldExport? ReadNetFieldExport(FArchive archive)
     {
         NetFieldExport? export = base.ReadNetFieldExport(archive);
-        if (export?.Name is "AmmoCount" or "LastFireTimeVerified" or "Instigator")
+        if (export?.Name is "AmmoCount" or "LastFireTimeVerified" or "Instigator" or "WeaponData")
         {
-            _shotFields.Clear();
-            _noShotFields.Clear();
+            _weaponFields.Clear();
+            _noWeaponFields.Clear();
         }
 
         return export;
     }
 
-    /// <summary>Reads the shot fields of one property update without changing the archive position.</summary>
-    private void ReadShotFields(FBitArchive archive, ShotFields fields, ChannelGuid weapon, bool enablePropertyChecksum)
+    /// <summary>Reads the shot and item fields of one property update without changing the archive position.</summary>
+    private void ReadWeaponFields(FBitArchive archive, WeaponFields fields, ChannelGuid weapon, bool enablePropertyChecksum)
     {
         int start = archive.Position;
         try
@@ -161,7 +179,15 @@ public sealed partial class FullExportReader
                     fire ??= WeaponFireOf(weapon);
                     fire.FireTimes.Add(CurrentTimeSeconds);
                 }
-                else if (handle == fields.Instigator && numBits > 0)
+                else if (handle == fields.WeaponData && numBits > 0)
+                {
+                    uint item = archive.ReadIntPacked();
+                    if (item != 0)
+                    {
+                        _weaponItemGuid[weapon] = item;
+                    }
+                }
+                else if (handle == fields.Instigator && numBits > 0 && fields.AmmoCount is not null)
                 {
                     uint instigator = archive.ReadIntPacked();
                     if (instigator != 0)
@@ -228,9 +254,30 @@ public sealed partial class FullExportReader
             List<float> shots = new[] { fire.AmmoShots, fire.FireTimes, fire.ActivateCues }.MaxBy(list => list.Count)!;
             foreach (float t in shots)
             {
-                player.RawShots.Add((t, weaponClass));
+                player.RawShots.Add((t, weaponClass, WeaponItem(weapon)));
             }
         }
+    }
+
+    /// <summary>Item id of a weapon actor (<c>WID_Shotgun_Break_Flintlock_Athena_SR</c>), <c>null</c> if unknown.</summary>
+    private string? WeaponItem(ChannelGuid? weaponGuid)
+        => weaponGuid is { } guid ? _weaponItem.GetValueOrDefault(guid) : null;
+
+    /// <summary>
+    /// The library clears its NetGUID to path table at the end of the reading, before the players are built,
+    /// so the item ids are resolved right before that.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        foreach ((ChannelGuid weapon, uint item) in _weaponItemGuid)
+        {
+            if (_netGuidCache.TryGetPathName(item, out string? path))
+            {
+                _weaponItem[weapon] = ShortClass(path);
+            }
+        }
+
+        base.Cleanup();
     }
 
     /// <summary>Last part of an archetype path: <c>/Game/.../B_Assault_Flintlock.B_Assault_Flintlock_C</c> -> <c>B_Assault_Flintlock_C</c>.</summary>

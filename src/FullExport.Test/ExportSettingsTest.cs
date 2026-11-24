@@ -19,6 +19,7 @@ public class ExportSettingsTest
         Assert.False(settings.TrackShots);
         Assert.False(settings.TrackPositions);
         Assert.False(settings.TrackWeapons);
+        Assert.False(settings.TrackWeaponItems);
         Assert.False(settings.TrackBuilds);
         Assert.False(settings.TrackGameplayCues);
         Assert.False(settings.TrackMovementDetails);
@@ -40,6 +41,7 @@ public class ExportSettingsTest
         Assert.True(settings.TrackShots);
         Assert.True(settings.TrackPositions);
         Assert.True(settings.TrackWeapons);
+        Assert.True(settings.TrackWeaponItems);
         Assert.True(settings.TrackBuilds);
         Assert.True(settings.TrackGameplayCues);
         Assert.False(settings.TrackMovementDetails);

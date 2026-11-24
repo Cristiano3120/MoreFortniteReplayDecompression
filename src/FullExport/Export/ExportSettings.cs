@@ -41,6 +41,7 @@ public sealed record ExportSettings
         TrackShots = true,
         TrackPositions = true,
         TrackWeapons = true,
+        TrackWeaponItems = true,
         TrackBuilds = true,
         TrackGameplayCues = true,
     };
@@ -89,6 +90,13 @@ public sealed record ExportSettings
     /// Off: <see cref="PlayerStats.Movement"/> stays empty.
     /// </summary>
     public bool TrackMovementDetails { get; init; }
+
+    /// <summary>
+    /// Item id and rarity of the weapons (<see cref="HitEvent.WeaponItem"/>, <see cref="HitEvent.WeaponRarity"/>,
+    /// <see cref="WeaponShots.Items"/>), for example <c>WID_Shotgun_Break_Flintlock_Athena_SR</c> instead of only the weapon class.
+    /// Off: the <c>WeaponData</c> of the weapons is not read and these values stay empty.
+    /// </summary>
+    public bool TrackWeaponItems { get; init; }
 
     /// <summary>Weapon changes of the players (<see cref="PlayerStats.EquippedWeapons"/>).</summary>
     public bool TrackWeapons { get; init; }

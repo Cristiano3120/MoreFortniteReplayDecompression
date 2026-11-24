@@ -29,26 +29,41 @@ public sealed partial class PlayerStats
         WeaponShots.Clear();
 
         Dictionary<string, int> shots = [];
-        foreach ((float t, string weapon) in RawShots)
+        Dictionary<(string Weapon, string Item), int> itemShots = [];
+        foreach ((float t, string weapon, string? item) in RawShots)
         {
             if (t >= start)
             {
                 shots[weapon] = shots.GetValueOrDefault(weapon) + 1;
+                if (item is not null)
+                {
+                    itemShots[(weapon, item)] = itemShots.GetValueOrDefault((weapon, item)) + 1;
+                }
             }
         }
 
         Dictionary<string, int> hits = [];
+        Dictionary<(string Weapon, string Item), int> itemHits = [];
         foreach (HitEvent hit in DamageDealtEvents)
         {
             if (!hit.IsSelfDamage && hit.Weapon is { } weapon && shots.ContainsKey(weapon))
             {
                 hits[weapon] = hits.GetValueOrDefault(weapon) + 1;
+                if (hit.WeaponItem is { } item)
+                {
+                    itemHits[(weapon, item)] = itemHits.GetValueOrDefault((weapon, item)) + 1;
+                }
             }
         }
 
         foreach ((string weapon, int count) in shots.OrderByDescending(s => s.Value).ThenBy(s => s.Key, StringComparer.Ordinal))
         {
-            WeaponShots.Add(new WeaponShots { Weapon = weapon, ShotsFired = count, Hits = hits.GetValueOrDefault(weapon) });
+            List<WeaponItemShots> items = [.. itemShots
+                .Where(i => i.Key.Weapon == weapon)
+                .OrderByDescending(i => i.Value).ThenBy(i => i.Key.Item, StringComparer.Ordinal)
+                .Select(i => new WeaponItemShots { Item = i.Key.Item, ShotsFired = i.Value, Hits = itemHits.GetValueOrDefault(i.Key) })];
+
+            WeaponShots.Add(new WeaponShots { Weapon = weapon, ShotsFired = count, Hits = hits.GetValueOrDefault(weapon), Items = items });
         }
 
         ShotsFired = WeaponShots.Sum(w => w.ShotsFired);

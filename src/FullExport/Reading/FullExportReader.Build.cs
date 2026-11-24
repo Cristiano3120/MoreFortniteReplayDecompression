@@ -323,6 +323,7 @@ public sealed partial class FullExportReader
                     IsShieldDestroyed = pHit.ShieldDestroyed,
                     Location = pHit.Location,
                     Weapon = WeaponClass(pHit.WeaponGuid),
+                    WeaponItem = WeaponItem(pHit.WeaponGuid),
                     IsWeaponFromCue = pHit.WeaponFromCue,
                     SecondsSinceWeaponChange = pHit.SecondsSinceWeaponChange,
                     SecondsSinceVictimKnocked = pHit.VictimKnockTime is { } knockTime ? pHit.T - knockTime : null,
